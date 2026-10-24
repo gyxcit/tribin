@@ -105,3 +105,16 @@ def test_normalize_rel():
     assert normalize_rel("../A") is None
     assert normalize_rel("/A") is None
     assert normalize_rel("C:\\A") is None
+
+
+def test_duplicate_alternatives_dropped_and_real_one_caps_confidence(sb):
+    from tribin.models import LLMAlternative
+
+    same = LLMAlternative(target_folder=f"{NOEL}/06_Admin", description="Devis", reasoning="identique")
+    other = LLMAlternative(target_folder=f"{NOEL}/01_Brief", description="Brief", reasoning="autre piste")
+    p, _ = run(sb, fixed(target_folder=f"{NOEL}/06_Admin", description="Devis", confidence=0.95, alternatives=[same]))
+    assert p.alternatives == [] and p.confidence == 0.95 and not p.needs_review
+    p, _ = run(sb, fixed(target_folder=f"{NOEL}/06_Admin", description="Devis", confidence=0.95, alternatives=[same, other]))
+    assert [a.target_folder for a in p.alternatives] == [f"{NOEL}/01_Brief"]
+    assert p.confidence == 0.55 and p.needs_review
+    assert any("hésite" in w for w in p.warnings)

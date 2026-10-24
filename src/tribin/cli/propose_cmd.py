@@ -85,6 +85,8 @@ def cmd_eval(args: argparse.Namespace) -> int:
         "dossiers_acceptables_pct": "Dossiers acceptables (%)", "clients_corrects_pct": "Clients corrects (%)",
         "categories_correctes_pct": "Catégories correctes (%)", "noms_exacts_pct": "Noms exacts (%)",
         "confiance_bonnes": "Confiance moyenne (bonnes)", "confiance_mauvaises": "Confiance moyenne (mauvaises)",
+        "erreurs_signalees_pct": "Erreurs signalées « à vérifier » (%)",
+        "bonnes_signalees_pct": "Bonnes réponses signalées à tort (%)",
         "temps_moyen_s": "Temps moyen par fichier (s)", "cout_moyen_usd": "Coût estimé par fichier ($)",
         "a_traiter_manuellement": "À traiter manuellement",
     }

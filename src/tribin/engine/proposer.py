@@ -23,6 +23,7 @@ from tribin.models import Alternative, FileInfo, LLMProposal, NameFields, Propos
 log = logging.getLogger(__name__)
 
 MAX_CLIENTS_IN_PROMPT = 30
+ALTERNATIVE_CONFIDENCE_CAP = 0.55  # même valeur que dans le barème du prompt
 
 
 @dataclass
@@ -178,10 +179,14 @@ def finalize(info: FileInfo, resp: LLMProposal, ctx: ProposeContext) -> Proposal
     if final_name != name:
         warnings.append(f"Un fichier « {name} » existe déjà : suffixe ajouté.")
     alternatives = []
-    for alt in resp.alternatives[:2]:
+    seen = {folder.casefold()}
+    for alt in resp.alternatives:
         alt_folder = normalize_rel(alt.target_folder)
-        if not alt_folder or ExclusionMatcher(conv.excluded_paths).matches_rel(alt_folder):
-            continue
+        if not alt_folder or alt_folder.casefold() in seen or ExclusionMatcher(conv.excluded_paths).matches_rel(alt_folder):
+            continue  # alternative vide, identique au premier choix ou en zone exclue
+        seen.add(alt_folder.casefold())
+        if len(alternatives) == 2:
+            break
         alt_fields = fields.model_copy(update={
             **fields_from_folder(alt_folder, conv),
             "description": clean_segment(alt.description, conv.naming) or fields.description,
@@ -189,6 +194,10 @@ def finalize(info: FileInfo, resp: LLMProposal, ctx: ProposeContext) -> Proposal
         alt_fields.category = alt_fields.category if alt_fields.category in conv.category_codes() else fields.category
         alt_name = build_name(alt_fields, conv.naming, info.extension, info.modified)
         alternatives.append(Alternative(target_folder=alt_folder, new_name=alt_name, reasoning=alt.reasoning))
+    if alternatives and confidence > ALTERNATIVE_CONFIDENCE_CAP:
+        # Règle du prompt appliquée par le code : si l'IA envisage un autre dossier, elle hésite -> « à vérifier ».
+        confidence = ALTERNATIVE_CONFIDENCE_CAP
+        warnings.append(f"L'IA hésite avec : {alternatives[0].target_folder}")
     return Proposal(
         file_id=info.file_id, source_path=info.path, target_folder=folder, folder_is_new=folder_is_new,
         new_name=final_name, fields=fields, confidence=confidence, reasoning=resp.reasoning.strip(),

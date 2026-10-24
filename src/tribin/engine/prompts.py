@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-PROMPT_VERSION = "p2"
+PROMPT_VERSION = "p3"
 
 SYSTEM_PROMPT = """Tu es l'assistant de rangement de fichiers d'une équipe. Ta mission : proposer
 le dossier où ranger un fichier et les éléments de son nouveau nom, en respectant
@@ -24,7 +24,17 @@ Règles :
   (ex. "Devis impression affiches"), sans répéter le client, la date ni la version.
 - Les exemples de corrections montrent les préférences de cet utilisateur :
   suis-les, sauf s'ils contredisent la convention d'équipe.
-- confidence : ta certitude réelle, entre 0 et 1. Sois honnête : 0.5 si tu hésites.
+- confidence : applique ce barème (une erreur coûte cher : une note basse fait
+  vérifier le fichier par un humain) :
+  0.9 à 1 : le contenu nomme le client, le projet ET la nature du document, et
+            cette nature correspond sans ambiguïté à une seule catégorie
+            (ex. « FACTURE … projet 2026-042 » → Admin) ;
+  0.7 à 0.85 : client et projet certains, catégorie déduite mais une seule plausible ;
+  0.4 à 0.55 : deux catégories ou deux projets sont plausibles, ou le fichier n'a
+            pas de texte et tu te fondes sur le nom, la date ou l'image ;
+  moins de 0.4 : tu devines.
+  Si une autre destination est plausible, indique-la dans alternatives et mets
+  confidence à 0.55 au plus.
 - Réponds UNIQUEMENT avec un objet JSON valide, sans aucun texte autour."""
 
 RESPONSE_FORMAT = """{

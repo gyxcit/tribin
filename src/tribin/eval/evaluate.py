@@ -93,6 +93,9 @@ def compute_metrics(rows: list[EvalRow]) -> dict[str, float]:
         "noms_exacts_pct": _pct(named) if named else -1,
         "confiance_bonnes": round(mean(good), 2) if good else 0.0,
         "confiance_mauvaises": round(mean(bad), 2) if bad else 0.0,
+        # Calibration : une erreur doit être marquée « à vérifier » (confiance < 0,6), une bonne réponse non.
+        "erreurs_signalees_pct": _pct([r.proposal.needs_review for r in done if not r.folder_ok]) if bad else -1,
+        "bonnes_signalees_pct": _pct([r.proposal.needs_review for r in done if r.folder_ok]) if good else -1,
         "temps_moyen_s": round(mean(r.proposal.duration_s for r in done), 2) if done else 0.0,
         "cout_moyen_usd": round(mean(r.proposal.cost_usd for r in done), 5) if done else 0.0,
         "a_traiter_manuellement": sum(1 for r in done if r.proposal.manual),
