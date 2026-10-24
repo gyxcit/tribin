@@ -86,7 +86,7 @@ def test_provider_selection(monkeypatch, tmp_path):
     monkeypatch.setenv("TRIBIN_MODEL", "gemini-flash-latest")  # modèle d'un autre fournisseur : ignoré
     monkeypatch.setenv("MISTRAL_API_KEY", "cle-de-test")
     s = load_settings(env_file=tmp_path / "absent.env")
-    assert s.provider == "mistral" and s.model == "mistral-small-latest" and s.api_key == "cle-de-test"
+    assert s.provider == "mistral" and s.model == "mistral-medium-latest" and s.api_key == "cle-de-test"
     assert isinstance(make_provider(s), MistralProvider)
     assert model_for("mistral", "magistral-medium-latest") == "magistral-medium-latest"
 

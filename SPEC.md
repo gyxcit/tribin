@@ -820,7 +820,7 @@ Indicateur principal en usage réel : **taux de propositions acceptées sans mod
 **Décisions à prendre**
 
 - Nom définitif du produit.
-- Modèle par défaut après évaluation (Haiku ou Sonnet), puis faisabilité d'un modèle local (Ollama).
+- Modèle par défaut après évaluation (Haiku ou Sonnet), puis faisabilité d'un modèle local (Ollama). Décidé pour Mistral : mistral-medium-latest ; Anthropic reste à évaluer.
 
 **Idées pour plus tard (hors MVP)**
 
@@ -873,6 +873,7 @@ Indicateur principal en usage réel : **taux de propositions acceptées sans mod
 | 2026-10-24 | 5.4 | Troisième fournisseur d'IA : Mistral AI (`TRIBIN_PROVIDER=mistral`, `MISTRAL_API_KEY`, SDK mistralai en option `--extra mistral`, modèle par défaut mistral-small-latest), choix dans les Réglages et dans le workflow eval | — | Ajouter la clé Mistral puis lancer l'éval |
 | 2026-10-24 | 1 (mesure réelle) | `tribin eval sandbox/ --min-score 70` avec Mistral `mistral-small-latest` via l'API, prompt p2 : **90 % de dossiers acceptables**, 70 % exacts, 100 % de clients, 72,5 % de catégories, ~2,1 s par fichier. Les 4 erreurs portent toutes sur la catégorie (client et projet justes). Confiance mal calibrée : 0,97 sur les bonnes réponses, 0,94 sur les mauvaises → le marqueur « à vérifier » se déclenche rarement | 90 % (Mistral, réel) | Améliorer la calibration de la confiance ; comparer avec mistral-medium-latest / Haiku |
 | 2026-10-24 | 1 (calibration) | Prompt p3 : barème de confiance explicite. Seul, sans effet sur Mistral Small (toujours 0,9–1 ; 0 erreur signalée). Ajout côté code : alternatives identiques au premier choix retirées, et alternative réelle ⇒ confiance plafonnée à 0,55 (« à vérifier », avec « L'IA hésite avec : … »). Éval officielle p3 : **Small** 87,5 % acceptables, confiance 0,90 (bonnes) / 0,74 (mauvaises), erreurs signalées 20 %, bonnes signalées à tort 8,6 % ; **Medium** 87,5 % acceptables, 100 % de clients, 0,82 / 0,69, erreurs signalées 60 %, bonnes signalées à tort 28,6 %. Avant (p2, Small) : 0 % des erreurs signalées. Variation d'un passage à l'autre : ±2 à 3 fichiers | 87,5 % (Mistral, réel) | Choisir le modèle par défaut (Small : moins de faux signalements ; Medium : erreurs mieux repérées) |
+| 2026-10-24 | 12 (décision) | Modèle Mistral par défaut : **mistral-medium-latest** (validé par le propriétaire) : moins d'erreurs présentées avec assurance (2 sur 40 contre 4 avec Small) et 100 % de clients corrects, au prix de plus de fichiers marqués « à vérifier » | — | — |
 
 ---
 

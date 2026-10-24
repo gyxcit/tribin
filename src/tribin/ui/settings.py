@@ -39,7 +39,7 @@ if TYPE_CHECKING:
 
 MODELS = {"anthropic": ["claude-haiku-5-5", "claude-sonnet-5-5"],
           "gemini": ["gemini-flash-latest", "gemini-flash-lite-latest", "gemini-pro-latest"],
-          "mistral": ["mistral-small-latest", "mistral-medium-latest", "mistral-large-latest"]}
+          "mistral": ["mistral-medium-latest", "mistral-small-latest", "mistral-large-latest"]}
 PROVIDER_LABELS = {"anthropic": "Anthropic (Claude)", "gemini": "Google (Gemini)", "mistral": "Mistral AI"}
 
 

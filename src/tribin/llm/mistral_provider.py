@@ -14,7 +14,7 @@ from tribin.llm.base import LLMError, T, Usage
 
 log = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "mistral-small-latest"
+DEFAULT_MODEL = "mistral-medium-latest"  # choisi après évaluation (meilleure calibration de la confiance)
 TIMEOUT_MS = 60_000
 MAX_TOKENS = 4000
 

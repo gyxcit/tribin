@@ -25,7 +25,7 @@ PROVIDERS: dict[str, dict] = {
     "gemini": {"env": ("GEMINI_API_KEY", "GOOGLE_API_KEY"), "keyring": "gemini_api_key",
                "default_model": "gemini-flash-latest", "prefix": "gemini"},
     "mistral": {"env": ("MISTRAL_API_KEY",), "keyring": "mistral_api_key",
-                "default_model": "mistral-small-latest",
+                "default_model": "mistral-medium-latest",
                 "prefix": ("mistral", "magistral", "ministral", "pixtral", "codestral", "devstral")},
 }
 DEFAULT_PROVIDER = "anthropic"
