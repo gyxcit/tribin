@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QDate, Qt
@@ -18,9 +19,11 @@ from PySide6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
+    QWidget,
 )
 
 from tribin.safety.journal import Journal
+from tribin.ui.theme import header_bar
 
 if TYPE_CHECKING:
     from tribin.ui.app import AppController
@@ -56,6 +59,10 @@ class HistoryWindow(QDialog):
         self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
         self.table.verticalHeader().setVisible(False)
+        self.table.setWordWrap(False)
+        self.table.setTextElideMode(Qt.TextElideMode.ElideMiddle)
+        for column in (0, 1, 2, 5):
+            self.table.horizontalHeader().setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
         buttons = QHBoxLayout()
         undo_op = QPushButton("Annuler l'opération")
         undo_op.clicked.connect(lambda: self._undo(batch=False))
@@ -66,7 +73,13 @@ class HistoryWindow(QDialog):
         buttons.addWidget(undo_batch)
         buttons.addStretch()
         buttons.addWidget(self.rate)
-        layout = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(header_bar("Historique", "Toutes les opérations sont annulables"))
+        body = QWidget()
+        layout = QVBoxLayout(body)
+        layout.setContentsMargins(16, 16, 16, 16)
+        outer.addWidget(body, 1)
         layout.addLayout(filters)
         layout.addWidget(self.table)
         layout.addLayout(buttons)
@@ -83,12 +96,25 @@ class HistoryWindow(QDialog):
                       STATUS_FR.get(op.get("status"), op.get("status", "")), op.get("source") or "",
                       op.get("destination") or "", op.get("batch_id", "")]
             for col, value in enumerate(values):
-                cell = QTableWidgetItem(value)
+                cell = QTableWidgetItem(self._short(value, op) if col in (3, 4) else value)
+                if col in (3, 4) and value:
+                    cell.setToolTip(value)
                 if op.get("error"):
                     cell.setToolTip(op["error"])
                 self.table.setItem(row, col, cell)
         rate = journal.acceptance_rate()
         self.rate.setText(f"Propositions acceptées sans modification : {rate:.0%}" if rate is not None else "")
+
+    @staticmethod
+    def _short(path: str, op: dict) -> str:
+        """Chemin relatif à la racine quand c'est possible (plus lisible), sinon chemin complet."""
+        root = op.get("root")
+        if path and root:
+            try:
+                return Path(path).relative_to(Path(root)).as_posix()
+            except ValueError:
+                pass
+        return path
 
     def _undo(self, batch: bool) -> None:
         rows = sorted({i.row() for i in self.table.selectionModel().selectedRows()})

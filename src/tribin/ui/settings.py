@@ -33,6 +33,7 @@ from tribin.learning.corrections import team_rule_alerts
 from tribin.learning.rules_store import delete_rule, list_rules, update_rule
 from tribin.service.profile import PRIVACY_NOTICE, save_profile
 from tribin.ui import system_integration
+from tribin.ui.theme import header_bar
 
 if TYPE_CHECKING:
     from tribin.ui.app import AppController
@@ -160,9 +161,18 @@ class SettingsDialog(QDialog):
         tabs.addTab(system, "Système")
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
+        buttons.button(QDialogButtonBox.StandardButton.Save).setText("Enregistrer")
+        buttons.button(QDialogButtonBox.StandardButton.Save).setObjectName("Primary")
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("Annuler")
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
-        layout = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(header_bar("Réglages", "Racines, convention, IA et intégration au système"))
+        body = QWidget()
+        layout = QVBoxLayout(body)
+        layout.setContentsMargins(16, 16, 16, 16)
+        outer.addWidget(body, 1)
         layout.addWidget(tabs)
         layout.addWidget(buttons)
 

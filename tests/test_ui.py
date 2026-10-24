@@ -24,7 +24,10 @@ NOEL = "ACME/2026/2026-042_Campagne-Noel"
 
 @pytest.fixture(scope="session")
 def qapp():
+    from tribin.ui.theme import apply_theme
+
     app = app_mod.TriBinApplication.instance() or app_mod.TriBinApplication(["tribin-test"])
+    apply_theme(app)
     yield app
     QThreadPool.globalInstance().waitForDone(10000)
     app.processEvents()
@@ -71,11 +74,13 @@ def test_drop_shows_proposal_in_bin_window(qapp, controller):
     controller.drop_paths([controller.sb / "inbox" / "scan0042.pdf"])
     assert wait(qapp, lambda: controller.service.pending() and controller.service.pending()[0].status == "ready")
     controller.refresh_queue()
-    table = controller.bin_window.table
-    assert table.rowCount() == 1
-    assert table.item(0, 2).text() == "2026-10-12_ACME_2026-042_Devis-impression.pdf"
-    assert "Devis de l'imprimeur" in table.item(0, 2).toolTip()
-    assert "1 fichier" in controller.tray.toolTip()
+    win = controller.bin_window
+    assert win.queue.count() == 1 and win.pages.currentIndex() == 1
+    assert win.detail.name.text() == "2026-10-12_ACME_2026-042_Devis-impression.pdf"
+    assert win.detail.folder.text() == f"{NOEL}/06_Admin"
+    assert "Devis de l'imprimeur" in win.detail.reasoning.text()
+    assert win.detail.pill.text() == "90%"
+    assert "1 fichier" in controller.tray.toolTip() and "1 fichier(s) en attente" in win.subtitle.text()
 
 
 def test_ui_stays_responsive_with_20_files(qapp, controller):
@@ -93,15 +98,15 @@ def test_validate_and_return_from_window(qapp, controller, monkeypatch):
     controller.refresh_queue()
     win = controller.bin_window
     # renvoyer le 2e fichier à l'origine
-    win.table.selectRow(1)
+    win.queue.setCurrentRow(1)
     returned = controller.service.pending()[1]
     win.return_selected()
     assert wait(qapp, lambda: len(controller.service.pending()) == 1)
     assert Path(returned.original_path).exists()
-    # modifier le nom puis valider
+    # modifier le nom dans le panneau de détail puis valider
     controller.refresh_queue()
-    win.table.selectRow(0)
-    win.table.item(0, 2).setText("2026-10-12_ACME_2026-042_Devis-final.pdf")
+    win.queue.setCurrentRow(0)
+    win.detail.name.setText("2026-10-12_ACME_2026-042_Devis-final.pdf")
     win.validate_selected()
     assert wait(qapp, lambda: not controller.service.pending())
     assert (controller.sb / "root" / NOEL / "06_Admin" / "2026-10-12_ACME_2026-042_Devis-final.pdf").exists()
@@ -115,7 +120,7 @@ def test_queue_restored_after_restart(qapp, controller, settings):
     other = app_mod.AppController(qapp, BinService(settings, provider_factory=controller.service._provider_factory),
                                   show_ui=False)
     other.refresh_queue()
-    assert other.bin_window.table.rowCount() == 1
+    assert other.bin_window.queue.count() == 1
     controller.extra += [other.bin_window, other.drop_widget, other.tray]
 
 
@@ -139,3 +144,19 @@ def test_logo_and_badge(qapp):
     assert plain.pixelColor(16, 16).alpha() == 255  # le logo est bien dessiné (pas une image vide)
     assert plain != logo_pixmap(32, 3).toImage()  # la pastille change l'icône
     assert not app_icon(5).isNull()
+
+
+def test_empty_state_and_edits_survive_refresh(qapp, controller):
+    win = controller.bin_window
+    controller.refresh_queue()
+    assert win.pages.currentIndex() == 0  # écran vide avec le logo
+    controller.drop_paths([controller.sb / "inbox" / "scan0042.pdf", controller.sb / "inbox" / "BC_4512.pdf"])
+    assert wait(qapp, lambda: len([i for i in controller.service.pending() if i.status == "ready"]) == 2)
+    controller.refresh_queue()
+    win.queue.setCurrentRow(0)
+    win.detail.name.setText("modifie.pdf")
+    win.queue.setCurrentRow(1)
+    controller.refresh_queue()  # une analyse qui se termine rafraîchit la liste
+    win.queue.setCurrentRow(0)
+    assert win.detail.name.text() == "modifie.pdf"  # la modification n'est pas perdue
+    assert win.validate_all_button.text() == "Tout valider (2)"

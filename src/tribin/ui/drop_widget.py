@@ -31,7 +31,7 @@ class DropWidget(QWidget):
         layout.addWidget(self.icon)
         self.label = QLabel("TriBin")
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.label.setStyleSheet("color: white; background: rgba(30,30,30,170); border-radius: 6px; padding: 1px 6px;")
+        self.label.setStyleSheet("color: white; background: #1F2544; border-radius: 9px; padding: 2px 9px; font-weight: 600;")
         layout.addWidget(self.label)
         self._drag_from: QPoint | None = None
         self._moved = False

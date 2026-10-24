@@ -18,6 +18,7 @@ from tribin.llm import make_provider
 from tribin.llm.base import LLMError
 from tribin.service.bin import BinError, BinService, Validation
 from tribin.ui.icons import app_icon
+from tribin.ui.theme import apply_theme
 from tribin.ui.workers import run_task
 
 log = logging.getLogger(__name__)
@@ -270,6 +271,7 @@ def main(argv: list[str] | None = None) -> int:
     app.setApplicationName("TriBin")
     app.setQuitOnLastWindowClosed(False)
     app.setWindowIcon(app_icon())
+    apply_theme(app)
     install_french_translations(app)
     if _send_to_running_instance(paths):
         return 0  # une instance tourne déjà : elle s'occupe des fichiers

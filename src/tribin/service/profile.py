@@ -22,7 +22,7 @@ QUESTIONS: list[tuple[str, str, list[str], bool]] = [
 ]
 
 PRIVACY_NOTICE = (
-    "Confidentialité : pour proposer un rangement, TriBin envoie au service d'IA configuré (Anthropic) un extrait "
+    "Confidentialité : pour proposer un rangement, TriBin envoie au service d'IA choisi (Anthropic, Google ou Mistral) un extrait "
     "du fichier — texte tronqué à 4 000 caractères et image réduite à 1 024 pixels —, jamais le fichier complet. "
     "Aucune télémétrie. Tes réponses d'onboarding restent sur cet ordinateur."
 )

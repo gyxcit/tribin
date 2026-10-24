@@ -35,6 +35,7 @@ from tribin.llm.base import LLMError
 from tribin.mapping.infer import infer_convention, propose_structure, structure_to_convention
 from tribin.mapping.scanner import scan_root
 from tribin.service.profile import PRIVACY_NOTICE, QUESTIONS, build_profile, save_profile
+from tribin.ui.icons import logo_pixmap
 from tribin.ui.settings import path_list
 
 if TYPE_CHECKING:
@@ -46,13 +47,16 @@ class OnboardingWizard(QWizard):
         super().__init__()
         self.c = controller
         self.setWindowTitle("Bienvenue dans TriBin")
-        self.resize(720, 560)
+        self.resize(760, 600)
+        self.setWizardStyle(QWizard.WizardStyle.ModernStyle)
+        self.setPixmap(QWizard.WizardPixmap.LogoPixmap, logo_pixmap(56))
         for button, text in [(QWizard.WizardButton.NextButton, "Suivant >"), (QWizard.WizardButton.BackButton, "< Précédent"),
                              (QWizard.WizardButton.FinishButton, "Terminer"), (QWizard.WizardButton.CancelButton, "Annuler")]:
             self.setButtonText(button, text)
 
         welcome = QWizardPage()
-        welcome.setTitle("Bienvenue")
+        welcome.setTitle("Bienvenue dans TriBin")
+        welcome.setSubTitle("Le tri de tes fichiers, sans effort.")
         wl = QVBoxLayout(welcome)
         intro = QLabel("TriBin fonctionne comme la Corbeille : tu y glisses un fichier, l'IA propose où le ranger "
                        "et comment le renommer selon la convention de ton équipe. Tu valides ou tu corriges ; "
@@ -68,7 +72,8 @@ class OnboardingWizard(QWizard):
         self.addPage(welcome)
 
         questions = QWizardPage()
-        questions.setTitle("Quelques questions (toutes facultatives)")
+        questions.setTitle("Quelques questions")
+        questions.setSubTitle("Toutes facultatives : elles aident l'IA à comprendre ton contexte.")
         ql = QFormLayout(questions)
         self.combos: dict[str, QComboBox] = {}
         self.checks: dict[str, list[QCheckBox]] = {}
@@ -93,7 +98,8 @@ class OnboardingWizard(QWizard):
         self.addPage(questions)
 
         roots_page = QWizardPage()
-        roots_page.setTitle("Répertoires de référence et zones exclues")
+        roots_page.setTitle("Où ranger ?")
+        roots_page.setSubTitle("Les dossiers gérés par TriBin, et ceux auxquels il ne touchera jamais.")
         rl = QVBoxLayout(roots_page)
         rl.addWidget(QLabel("Racines : dossiers (disque local ou NAS) dans lesquels TriBin range les fichiers."))
         box, self.roots = path_list(controller.service.config.roots)
@@ -106,6 +112,7 @@ class OnboardingWizard(QWizard):
 
         conv_page = QWizardPage()
         conv_page.setTitle("Convention de rangement")
+        conv_page.setSubTitle("La structure des dossiers et la façon de nommer les fichiers dans ton équipe.")
         cl = QVBoxLayout(conv_page)
         self.mode = QButtonGroup(conv_page)
         options = [("existing", "J'ai déjà un fichier de convention (ex. sur le NAS)"),
