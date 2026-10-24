@@ -15,6 +15,12 @@ jobs:
       - name: Installer les dépendances
         run: uv sync --extra ui
       - name: Lancer les tests
-        run: uv run pytest
+        shell: bash
+        run: |
+          set +e
+          uv run python -X faulthandler -m pytest -rs
+          code=$?
+          echo "Code de sortie de pytest : $code"
+          exit $code
         env:
           PYTHONIOENCODING: utf-8
