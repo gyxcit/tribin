@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QPushButton,
     QRadioButton,
     QSizePolicy,
@@ -146,6 +147,107 @@ class ChoiceCard(QFrame):
         self.setProperty("checked", "true" if checked else "false")
         self.style().unpolish(self)
         self.style().polish(self)
+
+
+# --- clé API ---------------------------------------------------------------------------------------
+
+
+def masked_key(key: str) -> str:
+    """« ••••3fQ2 » : seuls les 4 derniers caractères, pour reconnaître la clé sans l'exposer."""
+    return "••••" + key[-4:] if len(key) > 8 else "••••"
+
+
+class ApiKeyField(QWidget):
+    """Clé API : état bien visible (« ✓ Clé enregistrée ») avec « Remplacer », sinon champ de saisie.
+
+    `text()` renvoie la nouvelle clé saisie (vide : garder la clé enregistrée)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.saved = ""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+
+        self.status = QFrame()
+        self.status.setObjectName("KeyStatus")
+        row = QHBoxLayout(self.status)
+        row.setContentsMargins(12, 10, 10, 10)
+        row.setSpacing(10)
+        check = QLabel("✓")
+        check.setObjectName("KeyCheck")
+        check.setFixedSize(22, 22)
+        check.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        texts = QVBoxLayout()
+        texts.setSpacing(0)
+        self.status_title = QLabel()
+        self.status_title.setStyleSheet("font-weight: 600; color: #0F766E;")
+        self.status_detail = QLabel()
+        self.status_detail.setObjectName("Muted")
+        texts.addWidget(self.status_title)
+        texts.addWidget(self.status_detail)
+        self.replace_button = QPushButton("Remplacer la clé")
+        self.replace_button.clicked.connect(lambda: self._editing(True))
+        row.addWidget(check, 0, Qt.AlignmentFlag.AlignTop)
+        row.addLayout(texts, 1)
+        row.addWidget(self.replace_button, 0, Qt.AlignmentFlag.AlignVCenter)
+        layout.addWidget(self.status)
+
+        self.editor = QWidget()
+        edit_row = QHBoxLayout(self.editor)
+        edit_row.setContentsMargins(0, 0, 0, 0)
+        edit_row.setSpacing(8)
+        self.edit = QLineEdit()
+        self.edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.edit.setPlaceholderText("Collez votre clé ici")
+        self.show_key = QPushButton("Afficher")
+        self.show_key.setObjectName("Link")
+        self.show_key.setCheckable(True)
+        self.show_key.toggled.connect(self._show)
+        self.cancel = QPushButton("Garder l'ancienne")
+        self.cancel.setObjectName("Link")
+        self.cancel.clicked.connect(lambda: self._editing(False))
+        edit_row.addWidget(self.edit, 1)
+        edit_row.addWidget(self.show_key)
+        edit_row.addWidget(self.cancel)
+        layout.addWidget(self.editor)
+
+        self.hint = muted()
+        layout.addWidget(self.hint)
+
+    def set_provider(self, name: str, console: str, saved_key: str | None) -> None:
+        self.saved = saved_key or ""
+        self.edit.clear()
+        self.status_title.setText(f"Clé {name} enregistrée sur cet ordinateur")
+        self.status_detail.setText(f"Se termine par {masked_key(self.saved)}. Rien d'autre à faire.")
+        self.console = console
+        self._editing(not self.saved)
+
+    def _editing(self, editing: bool) -> None:
+        has = bool(self.saved)
+        self.status.setVisible(has and not editing)
+        self.editor.setVisible(editing or not has)
+        self.cancel.setVisible(has and editing)
+        if not editing:
+            self.edit.clear()
+        elif has:
+            self.edit.setFocus()
+        self.hint.setText(f"Nouvelle clé à créer sur {self.console}. Elle remplacera l'ancienne à l'enregistrement."
+                          if has and editing else
+                          "" if has else
+                          f"Créez-la sur {self.console}, puis collez-la ici. Sans clé, TriBin fonctionne mais "
+                          "chaque fichier est à ranger à la main.")
+        self.hint.setVisible(bool(self.hint.text()))
+
+    def _show(self, on: bool) -> None:
+        self.edit.setEchoMode(QLineEdit.EchoMode.Normal if on else QLineEdit.EchoMode.Password)
+        self.show_key.setText("Masquer" if on else "Afficher")
+
+    def text(self) -> str:
+        return self.edit.text().strip()
+
+    def setText(self, text: str) -> None:  # noqa: N802 — même nom que QLineEdit
+        self.edit.setText(text)
 
 
 # --- bouton avec raccourci ----------------------------------------------------------------------

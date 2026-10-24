@@ -36,7 +36,7 @@ from tribin.llm.base import LLMError
 from tribin.mapping.infer import infer_convention
 from tribin.mapping.scanner import scan_root
 from tribin.service.profile import PRIVACY_NOTICE, QUESTIONS, build_profile, save_profile
-from tribin.ui.components import ChoiceCard, divider, muted, section
+from tribin.ui.components import ApiKeyField, ChoiceCard, divider, muted, section
 from tribin.ui.folder_picker import excluded_picker, roots_picker
 from tribin.ui.icons import logo_pixmap
 
@@ -327,22 +327,9 @@ class OnboardingWizard(QWizard):
         layout.addSpacing(10)
         self.key_title = section("")
         layout.addWidget(self.key_title)
-        layout.addSpacing(2)
-        self.key_hint = muted()
-        layout.addWidget(self.key_hint)
-        layout.addSpacing(10)
-        key_row = QHBoxLayout()
-        self.api_key = QLineEdit()
-        self.api_key.setEchoMode(QLineEdit.EchoMode.Password)
-        self.show_key = QPushButton("Afficher")
-        self.show_key.setObjectName("Link")
-        self.show_key.setCheckable(True)
-        self.show_key.toggled.connect(lambda on: (
-            self.api_key.setEchoMode(QLineEdit.EchoMode.Normal if on else QLineEdit.EchoMode.Password),
-            self.show_key.setText("Masquer" if on else "Afficher")))
-        key_row.addWidget(self.api_key, 1)
-        key_row.addWidget(self.show_key)
-        layout.addLayout(key_row)
+        layout.addSpacing(8)
+        self.api_key = ApiKeyField()
+        layout.addWidget(self.api_key)
         layout.addStretch()
         current = self.c.service.config.provider or self.c.service.settings.provider
         self.set_provider(current if current in self.provider_cards else "mistral")
@@ -358,14 +345,8 @@ class OnboardingWizard(QWizard):
     def _provider_changed(self) -> None:
         key = self.provider()
         _, name, _, console, _ = next(p for p in PROVIDERS if p[0] == key)
-        has_key = bool(self.c.service.settings.for_provider(key).api_key)
         self.key_title.setText(f"Clé API {name.split(' (')[0]}")
-        self.api_key.setPlaceholderText("Une clé est déjà enregistrée sur cet ordinateur" if has_key
-                                        else "Collez votre clé ici")
-        self.key_hint.setText(("Une clé est déjà enregistrée : rien à faire. " if has_key else
-                               f"Créez-la sur {console}, puis collez-la ici. Sans clé, TriBin fonctionne mais "
-                               "chaque fichier est à ranger à la main. ")
-                              + "Elle est rangée dans le trousseau de l'ordinateur.")
+        self.api_key.set_provider(name.split(" (")[0], console, self.c.service.settings.for_provider(key).api_key)
 
     # --- valeurs et fin ---------------------------------------------------------------------------
 

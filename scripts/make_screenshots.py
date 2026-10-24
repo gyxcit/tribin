@@ -28,7 +28,10 @@ sys.path.insert(0, str(REPO / "tests"))
 def main() -> None:
     work = Path(tempfile.mkdtemp(prefix="tribin-demo-"))
     os.environ.update({"TRIBIN_DATA_DIR": str(work / "data"), "TRIBIN_SANDBOX_DIR": str(work / "Agence"),
-                       "TRIBIN_DEV_SANDBOX": "1", "TRIBIN_USER": "demo"})
+                       "TRIBIN_DEV_SANDBOX": "1", "TRIBIN_USER": "demo",
+                       # fausses clés : jamais la vraie clé (même masquée) sur une capture publiée
+                       "TRIBIN_PROVIDER": "mistral", "MISTRAL_API_KEY": "demo-0000000000000000DEMO",
+                       "ANTHROPIC_API_KEY": "", "GEMINI_API_KEY": "", "GOOGLE_API_KEY": ""})
     from fakes import FakeLLM, original_name
     from make_sandbox import make_sandbox
     from PySide6.QtCore import QThreadPool

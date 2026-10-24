@@ -263,7 +263,7 @@ def test_onboarding_simple_flow(qapp, controller, monkeypatch):
     wizard.chips["types"].group.buttons()[1].click()
     assert wizard.chips["types"].value() == ["Visuels", "Documents"]
     wizard.set_provider("gemini")
-    assert wizard.provider() == "gemini" and "aistudio.google.com" in wizard.key_hint.text()
+    assert wizard.provider() == "gemini" and "aistudio.google.com" in wizard.api_key.hint.text()
     wizard.provider_cards["mistral"].mousePressEvent(None)  # un clic sur la carte la sélectionne
     wizard.api_key.setText("cle-de-test")
     wizard.accept()
@@ -316,3 +316,22 @@ def test_auto_mode_and_widget_button(qapp, controller):
     assert wait(qapp, placed.exists)  # confiance 0,9 : rangé sans aucun clic
     assert wait(qapp, lambda: not controller.service.pending())
     assert wait(qapp, lambda: not controller._notice_timer.isActive() and controller._notice["done"] == 0, 5)
+
+
+def test_api_key_field_shows_saved_key_clearly(qapp):
+    from tribin.ui.components import ApiKeyField
+
+    field = ApiKeyField()
+    field.set_provider("Mistral", "console.mistral.ai", "sk-1234567890abcdWXYZ")
+    assert field.status.isVisibleTo(field) and not field.editor.isVisibleTo(field)
+    assert "enregistrée" in field.status_title.text() and "••••WXYZ" in field.status_detail.text()
+    assert "1234" not in field.status_detail.text()  # la clé n'est jamais affichée en entier
+    field.replace_button.click()
+    assert field.editor.isVisibleTo(field) and not field.status.isVisibleTo(field)
+    field.setText("nouvelle")
+    assert field.text() == "nouvelle"
+    field.cancel.click()  # « Garder l'ancienne »
+    assert field.text() == "" and field.status.isVisibleTo(field)
+    field.set_provider("Gemini", "aistudio.google.com", None)
+    assert field.editor.isVisibleTo(field) and not field.status.isVisibleTo(field)
+    assert "aistudio.google.com" in field.hint.text()

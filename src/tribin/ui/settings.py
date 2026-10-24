@@ -37,7 +37,7 @@ from tribin.learning.rules_store import delete_rule, list_rules, update_rule
 from tribin.service.bin import AUTO_MIN_CONFIDENCE
 from tribin.service.profile import PRIVACY_NOTICE, save_profile
 from tribin.ui import system_integration
-from tribin.ui.components import ChoiceCard, divider, muted, section
+from tribin.ui.components import ApiKeyField, ChoiceCard, divider, muted, section
 from tribin.ui.folder_picker import excluded_picker, roots_picker
 from tribin.ui.onboarding import PROVIDERS
 
@@ -218,11 +218,9 @@ class SettingsDialog(QDialog):
         model_row.addWidget(self.model)
         model_row.addStretch()
         page.add_row("Modèle", "Le modèle par défaut convient dans la plupart des cas.", column(model_row))
-        self.api_key = QLineEdit()
-        self.api_key.setEchoMode(QLineEdit.EchoMode.Password)
-        self.key_hint = muted()
+        self.api_key = ApiKeyField()
         page.add_row("Clé API", "Rangée dans le trousseau de l'ordinateur, jamais dans un fichier partagé.",
-                     column(self.api_key, self.key_hint))
+                     self.api_key)
         page.add_row("Confidentialité", "", muted(PRIVACY_NOTICE))
         current = ai_settings.provider if ai_settings.provider in self.provider_cards else "mistral"
         self.provider_cards[current].radio.setChecked(True)
@@ -287,11 +285,9 @@ class SettingsDialog(QDialog):
         provider = self.provider()
         self.model.clear()
         self.model.addItems(MODELS[provider])
-        console = next(p[3] for p in PROVIDERS if p[0] == provider)
-        has_key = bool(self.c.service.settings.for_provider(provider).api_key)
-        self.api_key.setPlaceholderText("Une clé est déjà enregistrée" if has_key else "Collez votre clé ici")
-        self.key_hint.setText("Laissez vide pour garder la clé enregistrée." if has_key
-                              else f"À créer sur {console}.")
+        _, name, _, console, _ = next(p for p in PROVIDERS if p[0] == provider)
+        self.api_key.set_provider(name.split(" (")[0], console,
+                                  self.c.service.settings.for_provider(provider).api_key)
 
     def _browse_convention(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "Fichier de convention", self.convention.text(), "YAML (*.yaml *.yml)")

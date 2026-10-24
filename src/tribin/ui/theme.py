@@ -140,6 +140,9 @@ QFrame#Pane {{ background: {SURFACE}; border: none; border-right: 1px solid {BOR
 
 QFrame#FolderRow {{ background: {SURFACE}; border: 1px solid {BORDER}; border-radius: 8px; }}
 QFrame#FolderRow QLabel {{ background: transparent; }}
+QFrame#KeyStatus {{ background: #EEFAF7; border: 1px solid #BFEAE2; border-radius: 8px; }}
+QFrame#KeyStatus QLabel {{ background: transparent; }}
+QFrame#KeyStatus QLabel#KeyCheck {{ background: {TEAL}; color: white; border-radius: 11px; font-weight: 700; }}
 QLabel#EmptyBox {{ border: 1px dashed #D5D9E6; border-radius: 8px; padding: 10px 12px; color: {FAINT}; }}
 
 QFrame#OpRow {{ border-radius: 10px; border: 1px solid #D4EFEA; background: #F7FAF9; }}
