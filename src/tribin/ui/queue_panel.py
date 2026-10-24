@@ -22,7 +22,7 @@ from tribin.service.queue import QueueItem
 from tribin.ui.components import FileBadge, KeyButton, Pill, elided, item_level, status_label
 
 GROUPS = (("check", "À vérifier"), ("wait", "Analyse en cours"), ("ready", "Prêts à ranger"))
-TABS = (("all", "Tous"), ("check", "À vérifier"), ("ready", "Prêts"))
+TABS = (("all", "Tous"), ("check", "À vérifier"), ("ready", "Prêts"), ("aside", "Mis de côté"))
 TEXT_WIDTH = 180
 
 
@@ -69,7 +69,9 @@ class QueueRow(QFrame):
         texts.addWidget(where)
         layout.addLayout(texts, 1)
         _, _, background, text = item_level(item)
-        layout.addWidget(Pill(status_label(item), (background, text)), 0, Qt.AlignmentFlag.AlignVCenter)
+        label = "Mis de côté" if item.status == "skipped" else status_label(item)
+        colors = ("#ECEEF4", "#5B6080") if item.status == "skipped" else (background, text)
+        layout.addWidget(Pill(label, colors), 0, Qt.AlignmentFlag.AlignVCenter)
 
     def set_selected(self, selected: bool) -> None:
         self.setProperty("selected", "true" if selected else "false")
@@ -86,6 +88,7 @@ class QueuePanel(QFrame):
         super().__init__()
         self.setObjectName("Pane")
         self.items: list[QueueItem] = []
+        self.aside: list[QueueItem] = []  # mis de côté : onglet à part, hors des compteurs
         self.order: list[str] = []  # file_id dans l'ordre d'affichage
         self.tab = "all"
         layout = QVBoxLayout(self)
@@ -161,8 +164,14 @@ class QueuePanel(QFrame):
 
     # --- contenu ------------------------------------------------------------------------------
 
-    def set_items(self, items: list[QueueItem], current_id: str | None) -> None:
+    def set_items(self, items: list[QueueItem], current_id: str | None, aside: list[QueueItem] | None = None) -> None:
         self.items = items
+        self.aside = list(aside or [])
+        if self.tab == "aside" and not self.aside:
+            self.tab = "all"
+        elif not items and self.aside:
+            self.tab = "aside"
+        self.tab_buttons[self.tab].setChecked(True)
         groups = [group_of(i) for i in items]
         ready, check = groups.count("ready"), groups.count("check") + groups.count("wait")
         plural = "s" if len(items) > 1 else ""
@@ -177,9 +186,10 @@ class QueuePanel(QFrame):
     def _update_tabs(self) -> None:
         groups = [group_of(i) for i in self.items]
         counts = {"all": len(groups), "check": groups.count("check") + groups.count("wait"),
-                  "ready": groups.count("ready")}
+                  "ready": groups.count("ready"), "aside": len(self.aside)}
         for key, label in TABS:
             self.tab_buttons[key].setText(f"{label}  {counts[key]}")
+        self.tab_buttons["aside"].setVisible(bool(self.aside))
 
     def set_tab(self, key: str) -> None:
         self.tab = key
@@ -192,14 +202,15 @@ class QueuePanel(QFrame):
 
     def _rebuild(self, current_id: str | None) -> None:
         needle = self.search.text().strip().casefold()
-        visible = [i for i in self.items if self._in_tab(i) and (
-            not needle or needle in Path(i.original_path).name.casefold()
-            or needle in (i.proposal.new_name.casefold() if i.proposal else ""))]
+        source = self.aside if self.tab == "aside" else [i for i in self.items if self._in_tab(i)]
+        visible = [i for i in source if not needle or needle in Path(i.original_path).name.casefold()
+                   or needle in (i.proposal.new_name.casefold() if i.proposal else "")]
+        groups = (("aside", "Mis de côté : ni comptés ni rangés automatiquement"),) if self.tab == "aside" else GROUPS
         self.list.blockSignals(True)
         self.list.clear()
         self.order = []
-        for key, title in GROUPS:
-            members = [i for i in visible if group_of(i) == key]
+        for key, title in groups:
+            members = [i for i in visible if key == "aside" or group_of(i) == key]
             if not members:
                 continue
             header = QListWidgetItem()
@@ -235,12 +246,13 @@ class QueuePanel(QFrame):
 
     def select_file(self, file_id: str) -> None:
         row = self._row_of(file_id)
-        if row < 0 and any(i.file_id == file_id for i in self.items):  # caché par l'onglet ou la recherche
+        aside = any(i.file_id == file_id for i in self.aside)
+        if row < 0 and (aside or any(i.file_id == file_id for i in self.items)):  # caché par l'onglet ou la recherche
             self.search.blockSignals(True)
             self.search.clear()
             self.search.blockSignals(False)
-            self.tab = "all"
-            self.tab_buttons["all"].setChecked(True)
+            self.tab = "aside" if aside else "all"
+            self.tab_buttons[self.tab].setChecked(True)
             self._rebuild(file_id)
             return
         if row >= 0:

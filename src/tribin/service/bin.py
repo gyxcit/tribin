@@ -23,7 +23,7 @@ from tribin.safety import restore
 from tribin.safety.executor import ExecutionReport, Executor, SimulationReport
 from tribin.safety.operations import Batch, Choice
 from tribin.service.config_store import AppConfig, load_config, save_config
-from tribin.service.queue import QueueItem, QueueStore
+from tribin.service.queue import ACTIVE, SKIPPED, QueueItem, QueueStore
 
 log = logging.getLogger(__name__)
 
@@ -235,6 +235,28 @@ class BinService:
                 self.queue.set_status(item.file_id, "analyzing")
                 ids.append(item.file_id)
         return ids
+
+    # --- mis de côté ---------------------------------------------------------------------------
+
+    def set_aside(self, file_id: str) -> None:
+        """« Mettre de côté » : le fichier quitte la liste « À ranger » (ni compté, ni rangé automatiquement)
+        mais reste dans le dossier tampon ; rien n'est déplacé."""
+        item = self.queue.get(file_id)
+        if item is None or item.status not in ACTIVE:
+            raise BinError("Fichier introuvable dans la file d'attente.")
+        self.queue.set_status(file_id, SKIPPED, item.error)
+
+    def resume(self, file_id: str) -> str:
+        """« Remettre à ranger » ; renvoie le nouveau statut (« analyzing » : analyse à relancer)."""
+        item = self.queue.get(file_id)
+        if item is None or item.status != SKIPPED:
+            raise BinError("Ce fichier n'est pas mis de côté.")
+        status = "ready" if item.proposal else "analyzing"
+        self.queue.set_status(file_id, status, item.error)
+        return status
+
+    def set_aside_items(self) -> list[QueueItem]:
+        return self.queue.skipped()
 
     def reload(self) -> None:
         """« Actualiser » : relit la clé API (trousseau, .env), la convention et les réglages."""

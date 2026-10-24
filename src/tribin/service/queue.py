@@ -10,7 +10,9 @@ from tribin.db import Database
 from tribin.models import Proposal
 
 # Statuts : analyzing (analyse en cours) · ready (proposition prête) · error · done (rangé) · returned (renvoyé)
+# · skipped (mis de côté : reste dans le dossier tampon, hors de la liste « À ranger ») · gone (disparu du tampon)
 ACTIVE = ("analyzing", "ready", "error")
+SKIPPED = "skipped"
 
 
 class QueueItem(BaseModel):
@@ -54,6 +56,10 @@ class QueueStore:
     def active(self) -> list[QueueItem]:
         marks = ",".join("?" * len(ACTIVE))
         rows = self.db.query(f"SELECT * FROM queue WHERE status IN ({marks}) ORDER BY added_at, file_id", ACTIVE)
+        return [self._item(r) for r in rows]
+
+    def skipped(self) -> list[QueueItem]:
+        rows = self.db.query("SELECT * FROM queue WHERE status=? ORDER BY updated_at DESC, file_id", (SKIPPED,))
         return [self._item(r) for r in rows]
 
     def set_status(self, file_id: str, status: str, error: str | None = None) -> None:

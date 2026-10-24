@@ -230,7 +230,9 @@ class DetailPanel(QFrame):
         bar.setSpacing(8)
         self.return_button = KeyButton("Renvoyer à l'origine", "R", "Ghost")
         self.return_button.clicked.connect(self.return_clicked)
-        self.skip_button = KeyButton("Passer", "Échap")
+        self.skip_button = KeyButton("Mettre de côté", "Échap")
+        self.skip_button.setToolTip("Retire le fichier de la liste « À ranger » sans le déplacer ; "
+                                    "il reste dans l'onglet « Mis de côté ».")
         self.skip_button.clicked.connect(self.skip_clicked)
         self.validate_button = KeyButton("Ranger ici", "Entrée", "Primary")
         self.validate_button.clicked.connect(self.validate_clicked)
@@ -327,6 +329,7 @@ class DetailPanel(QFrame):
             for widget in (self.name, self.browse, self.validate_button):
                 widget.setEnabled(ready)
             self.reanalyze_button.setEnabled(item.status != "analyzing")
+            self.skip_button.label.setText("Remettre à ranger" if item.status == "skipped" else "Mettre de côté")
             self.set_folder(folder)
             self.pill.setText(level_text(item))
             self.bar.set_value(p.confidence if p and not p.manual else None, LEVEL_COLORS[key])

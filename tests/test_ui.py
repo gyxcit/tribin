@@ -406,3 +406,22 @@ def test_widget_stays_on_screen_and_no_folder_means_no_ranging(qapp, controller)
     assert detail.folder == "" and not detail.validate_button.isEnabled()
     detail.set_folder(f"{NOEL}/06_Admin")  # dossier choisi à la main
     assert detail.validate_button.isEnabled()
+
+
+def test_set_aside_button(qapp, controller):
+    controller.drop_paths([controller.sb / "inbox" / "scan0042.pdf"])
+    assert wait(qapp, lambda: ready_items(controller, 1))
+    controller.refresh_queue()
+    win = controller.bin_window
+    item = controller.service.pending()[0]
+    win.select_file(item.file_id)
+    assert win.detail.skip_button.label.text() == "Mettre de côté"
+    win.detail.skip_button.click()  # un seul fichier : il quitte quand même la liste
+    assert controller.service.pending() == [] and win.bin_pages.currentIndex() == 1
+    assert win.queue.tab == "aside" and win.queue.order == [item.file_id]
+    assert controller.drop_widget.counts["total"] == 0  # plus compté dans le widget
+    win.select_file(item.file_id)
+    assert win.detail.skip_button.label.text() == "Remettre à ranger"
+    win.detail.skip_button.click()
+    assert [i.file_id for i in controller.service.pending()] == [item.file_id]
+    assert not win.queue.tab_buttons["aside"].isVisibleTo(win.queue)

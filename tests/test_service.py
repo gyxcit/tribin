@@ -176,3 +176,14 @@ def test_file_removed_from_staging_leaves_the_queue(settings, sb):
     other = svc.drop(sb / "inbox" / "notes.txt")
     Path(other.staged_path).unlink()
     assert svc.analyze(other.file_id).status == "gone" and svc.pending() == []
+
+
+def test_set_aside_and_resume(settings, sb):
+    svc = service(settings, sb)
+    item = svc.analyze(svc.drop(sb / "inbox" / "scan0042.pdf").file_id)
+    svc.set_aside(item.file_id)
+    assert svc.pending() == [] and [i.file_id for i in svc.set_aside_items()] == [item.file_id]
+    assert Path(item.staged_path).exists()  # rien n'a bougé
+    assert not svc.auto_file().done  # jamais rangé automatiquement
+    assert svc.resume(item.file_id) == "ready"
+    assert [i.file_id for i in svc.pending()] == [item.file_id] and svc.set_aside_items() == []

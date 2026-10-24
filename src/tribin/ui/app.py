@@ -108,7 +108,7 @@ class AppController:
         from tribin.ui.queue_panel import group_of
 
         items = self.service.pending()
-        self.bin_window.refresh(items)
+        self.bin_window.refresh(items, self.service.set_aside_items())
         self.tray.set_count(len(items))
         groups = [group_of(i) for i in items]
         self.drop_widget.set_state(total=len(items), analyzing=groups.count("wait"), ready=groups.count("ready"),
@@ -260,6 +260,18 @@ class AppController:
         self.service.reanalyze(file_id)
         self.refresh_queue()
         self._analyze(file_id)
+
+    def set_aside(self, file_id: str) -> None:
+        """« Mettre de côté » : hors de la liste « À ranger », sans rien déplacer."""
+        self.service.set_aside(file_id)
+        self.refresh_queue()
+        self.bin_window.statusBar().showMessage("Fichier mis de côté : retrouvez-le dans l'onglet « Mis de côté ».", 6000)
+
+    def resume(self, file_id: str) -> None:
+        """« Remettre à ranger »."""
+        if self.service.resume(file_id) == "analyzing":
+            self._analyze(file_id)
+        self.refresh_queue()
 
     def retry_without_ai(self) -> None:
         """Nouvelle clé ou nouveau fournisseur : relance l'analyse des fichiers « à traiter à la main »."""

@@ -53,6 +53,7 @@ class BinWindow(QMainWindow):
         super().__init__()
         self.c = controller
         self.items: list[QueueItem] = []
+        self.aside: list[QueueItem] = []  # mis de côté
         self._edits: dict[str, dict] = {}  # file_id -> {"name", "folder", "alt"} modifiés par l'utilisateur
         self.setWindowTitle("TriBin")
         self.setWindowIcon(app_icon())
@@ -188,14 +189,16 @@ class BinWindow(QMainWindow):
 
     # --- affichage ----------------------------------------------------------------------------
 
-    def refresh(self, items: list[QueueItem]) -> None:
+    def refresh(self, items: list[QueueItem], aside: list[QueueItem] | None = None) -> None:
         current = self.queue.current_file_id()
         self.items = items
-        self._edits = {k: v for k, v in self._edits.items() if any(i.file_id == k for i in items)}
+        self.aside = aside or []
+        known = {i.file_id for i in [*items, *self.aside]}
+        self._edits = {k: v for k, v in self._edits.items() if k in known}
         self.pending_count.setText(str(len(items)) if items else "")
         self._update_ai_chip()
-        self.bin_pages.setCurrentIndex(1 if items else 0)
-        self.queue.set_items(items, current)
+        self.bin_pages.setCurrentIndex(1 if items or self.aside else 0)
+        self.queue.set_items(items, current, self.aside)
 
     def _update_ai_chip(self) -> None:
         try:
@@ -212,7 +215,7 @@ class BinWindow(QMainWindow):
 
     def current_item(self) -> QueueItem | None:
         file_id = self.queue.current_file_id()
-        return next((i for i in self.items if i.file_id == file_id), None)
+        return next((i for i in [*self.items, *self.aside] if i.file_id == file_id), None)
 
     def select_file(self, file_id: str) -> None:
         self.queue.select_file(file_id)
@@ -320,7 +323,14 @@ class BinWindow(QMainWindow):
             self.statusBar().showMessage("Pas d'autre piste pour ce fichier.", 4000)
 
     def skip(self) -> None:
-        self.queue.select_next()
+        """« Mettre de côté » (Échap) ; sur un fichier déjà mis de côté : « Remettre à ranger »."""
+        item = self.current_item()
+        if item is None:
+            return
+        if item.status == "skipped":
+            self.c.resume(item.file_id)
+        else:
+            self.c.set_aside(item.file_id)
 
     def reanalyze_selected(self) -> None:
         item = self.current_item()
