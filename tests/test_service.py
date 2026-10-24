@@ -166,3 +166,13 @@ def test_files_without_ai_are_reanalyzed_after_adding_a_key(settings, sb):
     item = svc.analyze(item.file_id)
     assert not item.proposal.manual and item.proposal.target_folder == f"{NOEL}/06_Admin"
     assert svc.retry_without_ai() == []
+
+
+def test_file_removed_from_staging_leaves_the_queue(settings, sb):
+    svc = service(settings, sb)
+    item = svc.analyze(svc.drop(sb / "inbox" / "scan0042.pdf").file_id)
+    Path(item.staged_path).unlink()  # supprimé à la main dans _TriBin/a_trier
+    assert svc.retry_without_ai() == [] and svc.pending() == []
+    other = svc.drop(sb / "inbox" / "notes.txt")
+    Path(other.staged_path).unlink()
+    assert svc.analyze(other.file_id).status == "gone" and svc.pending() == []

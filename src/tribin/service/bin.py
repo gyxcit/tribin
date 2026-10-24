@@ -204,9 +204,10 @@ class BinService:
         if item is None:
             raise BinError("Fichier introuvable dans la file d'attente.")
         staged = Path(item.staged_path)
-        if not staged.exists():
-            item.status, item.error = "error", "Le fichier n'est plus dans le dossier tampon."
+        if not staged.exists():  # déplacé ou supprimé à la main : plus rien à ranger, il quitte la liste
+            item.status, item.error = "gone", "Le fichier n'est plus dans le dossier tampon."
             self.queue.upsert(item)
+            log.info("staged file missing, removed from queue: %s", staged)
             return item
         try:
             proposal = propose(extract(staged), self.context(Path(item.root)))
@@ -226,6 +227,9 @@ class BinService:
         Appelé après un changement de clé ou de fournisseur ; les fichiers repassent « en analyse »."""
         ids = []
         for item in self.pending():
+            if item.status != "analyzing" and not Path(item.staged_path).exists():
+                self.queue.set_status(item.file_id, "gone", "Le fichier n'est plus dans le dossier tampon.")
+                continue
             if item.status == "error" or (item.status == "ready" and item.proposal and item.proposal.manual):
                 self.queue.set_status(item.file_id, "analyzing")
                 ids.append(item.file_id)
