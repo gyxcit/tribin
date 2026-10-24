@@ -63,6 +63,7 @@ class Proposal(BaseModel):
     manual: bool = False  # True : échec de l'IA, « à traiter manuellement »
     client_hint: str | None = None
     excerpt: str = ""  # début du contenu extrait (apprentissage)
+    older_versions: list[str] = Field(default_factory=list)  # versions précédentes à ranger dans _versions/
     cost_usd: float = 0.0
     duration_s: float = 0.0
 

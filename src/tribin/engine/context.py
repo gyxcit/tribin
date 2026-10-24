@@ -15,6 +15,7 @@ from tribin.learning.rules_store import list_rules
 from tribin.llm.base import LLMProvider
 from tribin.mapping.profiles import FolderProfile, light_update, load_profiles, save_profiles
 from tribin.mapping.scanner import scan_root
+from tribin.versions.detector import apply_versioning
 
 
 def read_profile(settings: Settings) -> str:
@@ -44,4 +45,5 @@ def make_context(root: Path, convention: Convention, llm: LLMProvider, settings:
     ctx.candidate_provider = lambda info, hint: select_candidates(info, profiles, convention, hint)
     ctx.examples_provider = lambda info, hint: similar_examples(db, info, hint)
     ctx.rules_provider = lambda: [r.text for r in list_rules(db, only_enabled=True)]
+    ctx.version_detector = apply_versioning
     return ctx

@@ -62,6 +62,18 @@ class Prepared:
         return len(self.validations) > 1 or any(op.action == "mkdir" for op in self.batch.ops)
 
 
+def archive_older_versions(batch: Batch, proposal, root: Path, folder: str, convention: Convention,
+                           file_id: str) -> None:
+    """Versions précédentes -> <dossier>/_versions/ (même lot, donc même simulation et même annulation)."""
+    if folder != proposal.target_folder or not convention.versions.keep_older_in_subfolder:
+        return
+    for older in proposal.older_versions:
+        path = Path(older)
+        if path.exists():
+            batch.move(Choice(path, root, f"{folder}/{convention.versions.subfolder_name}", path.name,
+                              {"file_id": file_id, "version_archive": True}))
+
+
 class BinService:
     def __init__(self, settings: Settings, db: Database | None = None, provider_factory=make_provider):
         self.settings = settings
@@ -208,13 +220,15 @@ class BinService:
                 "ai_proposal": {"target_folder": p.target_folder, "new_name": p.new_name, "confidence": p.confidence},
                 "final_choice": {"target_folder": v.target_folder, "new_name": v.new_name},
             }
+            archive_older_versions(batch, p, Path(item.root), v.target_folder, self.convention(), v.file_id)
             batch.move(Choice(Path(item.staged_path), Path(item.root), v.target_folder, v.new_name, meta))
         return Prepared(batch, executor.simulate(batch.ops), validations)
 
     def commit(self, prepared: Prepared) -> ExecutionReport:
         """Exécute un lot préparé ; met à jour la file d'attente et l'apprentissage."""
         result = self.executor().execute(prepared.batch.ops)
-        by_file = {op.meta.get("file_id"): op for op in prepared.batch.ops if op.action == "move"}
+        by_file = {op.meta.get("file_id"): op for op in prepared.batch.ops
+                   if op.action == "move" and not op.meta.get("version_archive")}
         for v in prepared.validations:
             op = by_file.get(v.file_id)
             if op and op.status == "done":

@@ -837,6 +837,10 @@ Indicateur principal en usage réel : **taux de propositions acceptées sans mod
 
 *(L'agent ajoute ici toute idée hors périmètre rencontrée pendant le développement.)*
 
+- Décrire automatiquement (IA) les dossiers créés par TriBin dès leur création ; aujourd'hui ils sont décrits au prochain « Recartographier ».
+- Mode d'évaluation hors ligne (heuristique sans IA) pour vérifier la chaîne complète sans clé API.
+- Éditeur graphique de l'arbre de structure « créer de zéro » (aujourd'hui : relecture du fichier YAML généré).
+
 ---
 
 ## 13. État d'avancement
@@ -849,7 +853,7 @@ Indicateur principal en usage réel : **taux de propositions acceptées sans mod
 - [x] Phase 3 — Exécution sécurisée, journal, annulation
 - [x] Phase 4 — Application de bureau « Corbeille » (vérifié sous Windows ; reste à vérifier à la main sous macOS)
 - [x] Phase 5 — Apprentissage
-- [ ] Phase 6 — Versions
+- [x] Phase 6 — Versions
 
 **Journal de bord**
 
@@ -861,6 +865,7 @@ Indicateur principal en usage réel : **taux de propositions acceptées sans mod
 | 2026-10-24 | 3 | safety/ (executor plan/simulate/execute/undo, journal JSONL fsync, restore.py autonome stdlib, copie inter-volumes .tribin-partial + SHA-256), CLI file / history / undo / create-structure ; tous les tests obligatoires de la phase 3 | — | Phase 4 |
 | 2026-10-24 | 4 | service/ (dépôt, file d'attente SQLite, analyse, validation, renvoi), ui/ PySide6 (barre système avec compteur, widget flottant, Corbeille, Historique, Réglages, onboarding, instance unique, QFileOpenEvent, Envoyer vers), empaquetage PyInstaller (.exe testé : instance unique + fichier en argument) | — | Phase 5 |
 | 2026-10-24 | 5 | learning/ : corrections (décision, champs modifiés, conformité à la convention), 5 exemples similaires dans le prompt, signal implicite (déplacement manuel sous 14 jours), règles résumées toutes les 20 corrections (modifiables, supprimables), alerte « règle d'équipe souvent corrigée » | — | Phase 6 |
+| 2026-10-24 | 6 | versions/detector.py : nom de base normalisé, familles d'extensions, similarité ≥ 85, hash perceptuel ≤ 10 pour les images, numéro suivant, anciennes versions vers _versions/ dans le même lot (simulation + annulation) ; README complet | non mesuré (pas de clé API) | Mesurer l'éval avec une clé ; vérifs manuelles macOS |
 
 ---
 

@@ -18,6 +18,7 @@ from tribin.models import Proposal
 from tribin.safety.executor import Executor, SimulationReport
 from tribin.safety.journal import Journal
 from tribin.safety.operations import Choice
+from tribin.service.bin import archive_older_versions
 
 
 def ask(question: str) -> str:
@@ -93,6 +94,7 @@ def cmd_file(args: argparse.Namespace) -> int:
     folder, name, decision = chosen
     executor = Executor([ctx.root], excluded=ctx.convention.excluded_paths)
     batch = executor.batch()
+    archive_older_versions(batch, proposal, ctx.root, folder, ctx.convention, proposal.file_id)
     batch.move(Choice(args.file, ctx.root, folder, name, decision_meta(proposal, folder, name, decision)))
     report = executor.simulate(batch.ops)
     show_simulation(report)
@@ -103,7 +105,8 @@ def cmd_file(args: argparse.Namespace) -> int:
         return 0
     result = executor.execute(batch.ops)
     _print_result(result.operations, batch.id)
-    move = next((op for op in result.operations if op.action == "move" and op.status == "done"), None)
+    move = next((op for op in result.operations
+                 if op.action == "move" and op.status == "done" and not op.meta.get("version_archive")), None)
     if move is not None:
         _learn(ctx, args.file.name, proposal, folder, move, decision)
     return 0 if not result.failed else 1
