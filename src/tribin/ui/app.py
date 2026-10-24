@@ -331,6 +331,11 @@ def install_french_translations(app: QApplication) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv if argv is None else argv)
+    if "--diagnostic" in argv:  # rapport d'installation (fournisseurs d'IA, trousseau), sans interface
+        from tribin.diagnostic import write_report
+
+        write_report(get_settings().data_dir)
+        return 0
     paths = [Path(a) for a in argv[1:] if not a.startswith("-") and Path(a).exists()]
     setup_logging()
     app = TriBinApplication(argv)

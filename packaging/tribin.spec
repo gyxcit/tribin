@@ -37,6 +37,15 @@ a = Analysis(
     excludes=["tkinter", "matplotlib", "PySide6.QtWebEngineCore", "PySide6.Qt3DCore"],
     noarchive=False,
 )
+if sys.platform == "win32":
+    # OpenSSL : toujours celui de Python. Sinon PyInstaller peut prendre une autre version trouvée dans le PATH
+    # (celle de Git, par ex.) et « import ssl » échoue dans l'exe : plus aucun fournisseur d'IA ne se connecte.
+    python_dlls = Path(sys.base_prefix) / "DLLs"
+    own = [(dll.name, str(dll), "BINARY") for dll in python_dlls.glob("lib*-3*.dll")
+           if dll.name.lower().startswith(("libssl", "libcrypto"))]
+    replaced = {name.lower() for name, _, _ in own}
+    a.binaries = [b for b in a.binaries if b[0].lower() not in replaced] + own
+
 pyz = PYZ(a.pure)
 icon = str(HERE / ("tribin.icns" if sys.platform == "darwin" else "tribin.ico"))
 exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="TriBin", console=False, icon=icon)

@@ -45,6 +45,12 @@ def main() -> int:
         assert any("public.item" in t.get("LSItemContentTypes", []) for t in types), "CFBundleDocumentTypes absent"
         print("Info.plist : CFBundleDocumentTypes OK")
 
+    # Diagnostic : chaque fournisseur d'IA (et donc ssl, HTTPS) doit se charger dans l'appli empaquetée.
+    subprocess.run([str(exe), "--diagnostic"], env=env, timeout=120, check=True)
+    diagnostic = (work / "data" / "diagnostic.txt").read_text(encoding="utf-8")
+    assert "ÉCHEC" not in diagnostic, diagnostic
+    print("Diagnostic : fournisseurs d'IA et trousseau chargés.")
+
     first = subprocess.Popen([str(exe)], env=env)
     try:
         time.sleep(10)

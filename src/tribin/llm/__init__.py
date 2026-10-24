@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from tribin.config import PROVIDERS, Settings
 from tribin.llm.base import LLMError, LLMProvider
 
@@ -10,6 +12,8 @@ KEY_HINTS = {
     "gemini": "GEMINI_API_KEY",
     "mistral": "MISTRAL_API_KEY",
 }
+
+log = logging.getLogger(__name__)
 
 
 def make_provider(settings: Settings, model: str | None = None, provider: str | None = None) -> LLMProvider:
@@ -27,13 +31,15 @@ def make_provider(settings: Settings, model: str | None = None, provider: str | 
     if name == "mistral":
         try:
             from tribin.llm.mistral_provider import MistralProvider
-        except ImportError as exc:
+        except Exception as exc:  # ImportError, ou erreur pendant le chargement du SDK (appli empaquetée)
+            log.exception("chargement du fournisseur Mistral impossible")
             raise LLMError("Le module Mistral est absent de cette installation de TriBin : réinstallez TriBin (ou « uv sync » depuis les sources).") from exc
         return MistralProvider(api_key=settings.api_key, model=settings.model)
     if name == "gemini":
         try:
             from tribin.llm.gemini_provider import GeminiProvider
-        except ImportError as exc:
+        except Exception as exc:  # ImportError, ou erreur pendant le chargement du SDK (appli empaquetée)
+            log.exception("chargement du fournisseur Gemini impossible")
             raise LLMError("Le module Gemini est absent de cette installation de TriBin : réinstallez TriBin (ou « uv sync » depuis les sources).") from exc
         return GeminiProvider(api_key=settings.api_key, model=settings.model)
     from tribin.llm.anthropic_provider import AnthropicProvider
