@@ -1,106 +1,49 @@
-"""Panneau de détail de la Corbeille : le fichier sélectionné, sa proposition modifiable et les actions."""
+"""Panneau de détail de la Corbeille : avant → après, destination, catégorie en un clic, confiance, actions."""
 
 from __future__ import annotations
 
-from functools import lru_cache
 from pathlib import Path
 
-from PySide6.QtCore import QFileInfo, Qt, Signal
-from PySide6.QtGui import QFontMetrics, QPixmap
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
-    QFileIconProvider,
+    QButtonGroup,
     QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QPushButton,
-    QSizePolicy,
+    QScrollArea,
     QVBoxLayout,
     QWidget,
 )
 
 from tribin.service.queue import QueueItem
-from tribin.ui.theme import pill_colors, pill_style
+from tribin.ui.components import Breadcrumb, ConfidenceGauge, KeyButton, Pill, elided, item_level, section, thumbnail
+from tribin.ui.theme import BORDER, mono_font
 
-IMAGE_EXT = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".tif", ".tiff"}
-
-
-PREVIEW_EXT = {".pdf", ".ai", ".psd"}
-
-
-@lru_cache(maxsize=256)
-def _preview_bytes(path: str, mtime: float, size: int) -> bytes | None:
-    """Aperçu JPEG d'un PDF, AI ou PSD (mis en cache tant que le fichier ne change pas)."""
-    from tribin.extract import extract
-
-    try:
-        info = extract(Path(path))
-    except Exception:
-        return None
-    if info.images:
-        return info.images[0]
-    if Path(path).suffix.lower() in {".pdf", ".ai"}:
-        from tribin.extract.pdf import render_first_page
-
-        return render_first_page(Path(path))
-    return None
+HESITATION = "L'IA hésite avec"
+NEW_VERSION = "Nouvelle version"
 
 
-def thumbnail(path: Path, size: int) -> QPixmap:
-    """Miniature d'une image, aperçu d'un PDF/AI/PSD, sinon l'icône du type de fichier."""
-    suffix = path.suffix.lower()
-    pix = QPixmap()
-    if suffix in IMAGE_EXT and path.exists():
-        pix = QPixmap(str(path))
-    elif suffix in PREVIEW_EXT and path.exists():
-        data = _preview_bytes(str(path), path.stat().st_mtime, path.stat().st_size)
-        if data:
-            pix.loadFromData(data)
-    if not pix.isNull():
-        return pix.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-    return QFileIconProvider().icon(QFileInfo(str(path))).pixmap(size, size)
+def category_label(code: str) -> str:
+    """« 02_Creation » -> « Creation » : libellé court d'une catégorie de la convention."""
+    return code.split("_", 1)[-1].replace("-", " ") if "_" in code else code
 
 
-def elided(text: str, widget: QWidget, width: int, mode: Qt.TextElideMode = Qt.TextElideMode.ElideRight) -> str:
-    return QFontMetrics(widget.font()).elidedText(text, mode, width)
-
-
-def short_confidence(item: QueueItem) -> str:
-    """Version courte pour la liste : « 92 % », « Analyse… », « À traiter »."""
+def level_text(item: QueueItem) -> str:
     if item.status == "analyzing":
-        return "Analyse…"
-    if item.status == "error" or not item.proposal or item.proposal.manual:
-        return "À traiter"
-    return f"{item.proposal.confidence:.0%}"
-
-
-def confidence_text(item: QueueItem) -> str:
-    if item.status == "analyzing":
-        return "Analyse…"
+        return "Analyse en cours…"
     if item.status == "error":
-        return "Erreur"
+        return "Erreur d'analyse"
     p = item.proposal
     if p is None or p.manual:
-        return "À traiter"
-    if p.needs_review:
-        return f"À vérifier · {p.confidence:.0%}"
-    return f"{p.confidence:.0%}"
-
-
-def item_pill(item: QueueItem) -> tuple[str, str]:
-    p = item.proposal
-    return pill_colors(p.confidence if p else None, manual=bool(p and p.manual) or item.status == "error",
-                       waiting=item.status == "analyzing")
-
-
-def section(text: str) -> QLabel:
-    label = QLabel(text.upper())
-    label.setObjectName("Section")
-    return label
+        return "À traiter à la main"
+    return f"{item_level(item)[1]} · {p.confidence:.0%}".replace("%", " %")
 
 
 class DetailPanel(QFrame):
-    """Proposition du fichier sélectionné ; le nom et le dossier se modifient directement."""
+    """Proposition du fichier sélectionné ; nom, dossier et catégorie se modifient directement."""
 
     edited = Signal()
     alternative_chosen = Signal(int)
@@ -113,140 +56,275 @@ class DetailPanel(QFrame):
         super().__init__()
         self.setObjectName("Card")
         self.item: QueueItem | None = None
+        self._folder = ""
+        self._categories: list[str] = []
         self._filling = False
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(22, 20, 22, 20)
-        layout.setSpacing(8)
+
+        content = QWidget()
+        body = QVBoxLayout(content)
+        body.setContentsMargins(24, 22, 24, 12)
+        body.setSpacing(18)
 
         top = QHBoxLayout()
-        self.thumb = QLabel()
-        self.thumb.setFixedSize(96, 96)
-        self.thumb.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.thumb.setStyleSheet("background: #F5F6FA; border-radius: 8px;")
-        top.addWidget(self.thumb)
-        heading = QVBoxLayout()
+        top.setSpacing(24)
+        self.preview = QLabel()
+        self.preview.setFixedSize(150, 190)
+        self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.preview.setStyleSheet("background: #F5F6FA; border-radius: 10px;")
+        top.addWidget(self.preview, 0, Qt.AlignmentFlag.AlignTop)
+        names = QVBoxLayout()
+        names.setSpacing(8)
+        chips = QHBoxLayout()
+        chips.setSpacing(8)
+        self.pill = Pill()
+        self.note = Pill(colors=("#E8EAF6", "#2C3460"))
+        chips.addWidget(self.pill)
+        chips.addWidget(self.note)
+        chips.addStretch()
+        names.addLayout(chips)
+        names.addWidget(section("Avant"))
         self.original = QLabel()
-        self.original.setObjectName("Big")
-        self.original.setWordWrap(True)
-        self.origin_path = QLabel()
-        self.origin_path.setObjectName("Muted")
-        self.pill = QLabel()
-        self.pill.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
-        heading.addWidget(self.original)
-        heading.addWidget(self.origin_path)
-        heading.addWidget(self.pill)
-        heading.addStretch()
-        top.addLayout(heading, 1)
-        layout.addLayout(top)
-        layout.addSpacing(8)
-
-        layout.addWidget(section("Nouveau nom"))
+        strike = mono_font()
+        strike.setStrikeOut(True)
+        self.original.setFont(strike)
+        self.original.setObjectName("Strike")
+        self.original.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        names.addWidget(self.original)
+        names.addWidget(section("Après"))
+        name_row = QHBoxLayout()
         self.name = QLineEdit()
+        self.name.setObjectName("NewName")
+        self.name.setFont(mono_font())
+        self.name.setAccessibleName("Nouveau nom")
         self.name.textChanged.connect(self._changed)
         self.name.returnPressed.connect(self.validate_clicked)
-        layout.addWidget(self.name)
-        layout.addWidget(section("Dossier de rangement"))
-        folder_row = QHBoxLayout()
-        self.folder = QLineEdit()
-        self.folder.textChanged.connect(self._changed)
-        self.folder.returnPressed.connect(self.validate_clicked)
-        self.browse = QPushButton("Parcourir…")
-        self.browse.clicked.connect(self.browse_clicked)
-        folder_row.addWidget(self.folder, 1)
-        folder_row.addWidget(self.browse)
-        layout.addLayout(folder_row)
-        self.new_folder = QLabel("Ce dossier sera créé (la simulation te sera montrée avant).")
-        self.new_folder.setObjectName("Muted")
-        layout.addWidget(self.new_folder)
+        self.rename_button = KeyButton("Modifier", "E")
+        self.rename_button.clicked.connect(self.focus_name)
+        name_row.addWidget(self.name, 1)
+        name_row.addWidget(self.rename_button)
+        names.addLayout(name_row)
+        names.addStretch()
+        top.addLayout(names, 1)
+        body.addLayout(top)
 
-        layout.addWidget(section("Pourquoi"))
+        destination = QVBoxLayout()
+        destination.setSpacing(10)
+        destination.addWidget(section("Destination"))
+        crumb_row = QHBoxLayout()
+        self.breadcrumb = Breadcrumb()
+        self.browse = QPushButton("Autre dossier…")
+        self.browse.setObjectName("Link")
+        self.browse.clicked.connect(self.browse_clicked)
+        crumb_row.addWidget(self.breadcrumb)
+        crumb_row.addWidget(self.browse)
+        crumb_row.addStretch()
+        destination.addLayout(crumb_row)
+        self.cat_row = QHBoxLayout()
+        self.cat_row.setSpacing(6)
+        self.cat_group = QButtonGroup(self)
+        self.cat_group.setExclusive(True)
+        self.cat_group.buttonClicked.connect(self._category_clicked)
+        destination.addLayout(self.cat_row)
+        body.addLayout(destination)
+
+        confidence = QVBoxLayout()
+        confidence.setSpacing(6)
+        head = QHBoxLayout()
+        head.addWidget(section("Confiance de l'IA"))
+        head.addStretch()
+        self.conf_value = QLabel()
+        self.conf_value.setStyleSheet("font-weight: 700;")
+        head.addWidget(self.conf_value)
+        confidence.addLayout(head)
+        self.gauge = ConfidenceGauge()
+        confidence.addWidget(self.gauge)
+        legend = QHBoxLayout()
+        for text in ("À vérifier", "À regarder", "Sûr"):
+            label = QLabel(text)
+            label.setObjectName("Muted")
+            legend.addWidget(label)
+            if text != "Sûr":
+                legend.addStretch()
+        confidence.addLayout(legend)
+        body.addLayout(confidence)
+
+        body.addWidget(section("Pourquoi cette proposition"))
         self.reasoning = QLabel()
         self.reasoning.setWordWrap(True)
-        layout.addWidget(self.reasoning)
+        self.reasoning.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        body.addWidget(self.reasoning)
         self.warnings = QLabel()
         self.warnings.setObjectName("Warning")
         self.warnings.setWordWrap(True)
-        layout.addWidget(self.warnings)
+        body.addWidget(self.warnings)
 
-        self.alt_title = section("Autres pistes")
-        layout.addWidget(self.alt_title)
-        self.alt_box = QWidget()
-        self.alt_layout = QVBoxLayout(self.alt_box)
-        self.alt_layout.setContentsMargins(0, 0, 0, 0)
-        self.alt_layout.setSpacing(4)
-        layout.addWidget(self.alt_box)
-        layout.addStretch()
+        self.alt_title = section("L'IA hésite avec")
+        self.alt_title.setStyleSheet("color: #8A4B05;")
+        body.addWidget(self.alt_title)
+        self.alt_box = QVBoxLayout()
+        self.alt_box.setSpacing(8)
+        self.alt_cards = [self._alt_card(index) for index in range(2)]  # créés une fois, réutilisés
+        for card, _, _ in self.alt_cards:
+            self.alt_box.addWidget(card)
+        body.addLayout(self.alt_box)
+        body.addStretch()
 
-        actions = QHBoxLayout()
-        self.validate_button = QPushButton("Valider et ranger  ⏎")
-        self.validate_button.setObjectName("Primary")
+        scroll = QScrollArea()
+        scroll.setWidget(content)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+        actions = QFrame()
+        actions.setObjectName("ActionBar")
+        actions.setStyleSheet(f"QFrame#ActionBar {{ border: none; border-top: 1px solid {BORDER}; background: transparent; }}")
+        bar = QHBoxLayout(actions)
+        bar.setContentsMargins(24, 14, 24, 18)
+        self.validate_button = KeyButton("Valider et ranger", "Entrée", "Primary")
         self.validate_button.clicked.connect(self.validate_clicked)
-        self.return_button = QPushButton("Renvoyer à l'origine  (R)")
+        self.return_button = KeyButton("Renvoyer à l'origine", "R")
         self.return_button.clicked.connect(self.return_clicked)
-        self.skip_button = QPushButton("Passer  (Échap)")
+        self.skip_button = KeyButton("Passer", "Échap", "Ghost")
         self.skip_button.clicked.connect(self.skip_clicked)
-        actions.addWidget(self.validate_button)
-        actions.addWidget(self.return_button)
-        actions.addStretch()
-        actions.addWidget(self.skip_button)
-        layout.addLayout(actions)
+        bar.addWidget(self.validate_button)
+        bar.addWidget(self.return_button)
+        bar.addStretch()
+        bar.addWidget(self.skip_button)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        outer.addWidget(scroll, 1)
+        outer.addWidget(actions)
+
+    # --- valeurs ------------------------------------------------------------------------------
+
+    @property
+    def folder(self) -> str:
+        return self._folder
+
+    def set_folder(self, folder: str) -> None:
+        self._folder = folder.strip().strip("/")
+        parts = [p for p in self._folder.split("/") if p]
+        self.breadcrumb.set_parts(parts)
+        current = parts[-1] if parts else ""
+        for button in self.cat_group.buttons():
+            button.setChecked(button.property("code") == current)
+            button.setEnabled(bool(parts) and current in self._categories and self.name.isEnabled())
+        self._changed()
+
+    def focus_name(self) -> None:
+        self.name.setFocus()
+        self.name.selectAll()
 
     def _changed(self) -> None:
         if not self._filling:
             self.edited.emit()
 
-    def show_item(self, item: QueueItem | None, name: str = "", folder: str = "") -> None:
+    def _category_clicked(self, button: QPushButton) -> None:
+        parts = [p for p in self._folder.split("/") if p]
+        if parts and parts[-1] in self._categories:
+            parts[-1] = button.property("code")
+            self.set_folder("/".join(parts))
+
+    def _build_categories(self, categories: list[str]) -> None:
+        if categories == self._categories:
+            return
+        self._categories = categories
+        for button in self.cat_group.buttons():
+            self.cat_group.removeButton(button)
+            button.hide()
+            button.deleteLater()
+        while self.cat_row.count():
+            self.cat_row.takeAt(0)
+        for code in categories:
+            button = QPushButton(category_label(code))
+            button.setObjectName("Chip")
+            button.setCheckable(True)
+            button.setProperty("code", code)
+            button.setToolTip(code)
+            self.cat_group.addButton(button)
+            self.cat_row.addWidget(button)
+            button.show()
+        self.cat_row.addStretch()
+
+    # --- affichage ----------------------------------------------------------------------------
+
+    def show_item(self, item: QueueItem | None, name: str = "", folder: str = "",
+                  categories: list[str] | None = None) -> None:
         """Affiche un fichier ; `name` et `folder` : valeurs en cours (éventuellement modifiées)."""
         self.item = item
+        self.setVisible(item is not None)
+        if item is None:
+            return
         self._filling = True
         try:
-            if item is None:
-                self.setVisible(False)
-                return
-            self.setVisible(True)
+            self._build_categories(categories or [])
             p = item.proposal
             ready = item.status == "ready" and p is not None
-            self.thumb.setPixmap(thumbnail(Path(item.staged_path), 88))
-            self.original.setText(Path(item.original_path).name)
-            origin = f"Venait de : {Path(item.original_path).parent}"
-            self.origin_path.setText(elided(origin, self.origin_path, 420, Qt.TextElideMode.ElideMiddle))
-            self.origin_path.setToolTip(str(Path(item.original_path).parent))
-            self.pill.setText(confidence_text(item))
-            self.pill.setStyleSheet(pill_style(item_pill(item)))
+            _, _, background, text = item_level(item)
+            self.pill.setText(level_text(item))
+            self.pill.set_colors((background, text))
+            notes = [w for w in (p.warnings if p else []) if w.startswith(NEW_VERSION)]
+            self.note.setVisible(bool(notes))
+            self.note.setText(notes[0] if notes else "")
+            self.preview.setPixmap(thumbnail(Path(item.staged_path), 140, 180))
+            original = Path(item.original_path).name
+            self.original.setText(elided(original, self.original, 520, Qt.TextElideMode.ElideMiddle))
+            self.original.setToolTip(f"{original}\nVenait de : {Path(item.original_path).parent}")
             self.name.setText(name)
-            self.folder.setText(folder)
-            self.name.setEnabled(ready)  # une proposition « à traiter » se complète à la main
-            self.folder.setEnabled(ready)
-            self.browse.setEnabled(ready)
-            self.validate_button.setEnabled(ready)
-            self.new_folder.setVisible(bool(p and p.folder_is_new and folder == p.target_folder))
+            for widget in (self.name, self.rename_button, self.browse, self.validate_button):
+                widget.setEnabled(ready)
+            self.set_folder(folder)
+            self.conf_value.setText(f"{p.confidence:.0%}".replace("%", " %") if p and not p.manual else "—")
+            self.conf_value.setStyleSheet(f"font-weight: 700; color: {text};")
+            self.gauge.set_value(p.confidence if p and not p.manual else None)
             if item.status == "analyzing":
                 self.reasoning.setText("L'IA analyse ce fichier…")
             elif item.status == "error":
                 self.reasoning.setText(item.error or "Erreur pendant l'analyse.")
             else:
                 self.reasoning.setText(p.reasoning if p and p.reasoning else "—")
-            warnings = list(p.warnings) if p else []
+            others = [w for w in (p.warnings if p else []) if not w.startswith((HESITATION, NEW_VERSION))]
             if item.error and item.status == "ready":
-                warnings.append(item.error)
-            self.warnings.setText("\n".join(f"⚠ {w}" for w in warnings))
-            self.warnings.setVisible(bool(warnings))
+                others.append(item.error)
+            self.warnings.setText("\n".join(f"⚠ {w}" for w in others))
+            self.warnings.setVisible(bool(others))
             self._fill_alternatives(item)
         finally:
             self._filling = False
 
+    def _alt_card(self, index: int) -> tuple[QFrame, QLabel, QLabel]:
+        card = QFrame()
+        card.setObjectName("AltCard")
+        row = QHBoxLayout(card)
+        row.setContentsMargins(14, 10, 10, 10)
+        texts = QVBoxLayout()
+        texts.setSpacing(2)
+        where = QLabel()
+        bold = QFont(where.font())
+        bold.setBold(True)
+        where.setFont(bold)
+        where.setWordWrap(True)
+        why = QLabel()
+        why.setStyleSheet("color: #6B5A3A;")
+        why.setWordWrap(True)
+        texts.addWidget(where)
+        texts.addWidget(why)
+        row.addLayout(texts, 1)
+        use = QPushButton("Utiliser cette piste")
+        use.setObjectName("AltButton")
+        use.clicked.connect(lambda _=False, i=index: self.alternative_chosen.emit(i))
+        row.addWidget(use, 0, Qt.AlignmentFlag.AlignVCenter)
+        card.hide()
+        return card, where, why
+
     def _fill_alternatives(self, item: QueueItem) -> None:
-        while self.alt_layout.count():
-            widget = self.alt_layout.takeAt(0).widget()
-            if widget:
-                widget.deleteLater()
         alternatives = item.proposal.alternatives if item.proposal else []
         self.alt_title.setVisible(bool(alternatives))
-        for index, alt in enumerate(alternatives):
-            chip = QPushButton(f"{alt.target_folder}/{alt.new_name}")
-            chip.setObjectName("Chip")
-            chip.setFixedHeight(28)
-            chip.setToolTip(alt.reasoning or "")
-            chip.clicked.connect(lambda _=False, i=index: self.alternative_chosen.emit(i))
-            self.alt_layout.addWidget(chip, 0, Qt.AlignmentFlag.AlignLeft)
-            chip.show()  # ajouté à un panneau déjà visible : à afficher explicitement
+        for index, (card, where, why) in enumerate(self.alt_cards):
+            if index < len(alternatives):
+                alt = alternatives[index]
+                where.setText(" › ".join(p for p in alt.target_folder.split("/") if p))
+                why.setText(alt.reasoning or "Autre destination plausible.")
+            card.setVisible(index < len(alternatives))

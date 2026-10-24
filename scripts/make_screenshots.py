@@ -38,7 +38,6 @@ def main() -> None:
     from tribin.models import LLMAlternative, LLMProposal
     from tribin.service.bin import BinService
     from tribin.service.config_store import AppConfig
-    from tribin.ui.history import HistoryWindow
     from tribin.ui.onboarding import OnboardingWizard
     from tribin.ui.settings import SettingsDialog
     from tribin.ui.theme import apply_theme
@@ -89,13 +88,33 @@ def main() -> None:
 
     window = controller.bin_window
     controller.refresh_queue()
-    window.queue.setCurrentRow(1)
-    save(window, "corbeille.png", (1180, 660))
-    window.queue.setCurrentRow(3)
+    by_name = {Path(i.original_path).name: i for i in service.pending()}
+    window.select_file(by_name["affiche_noel_v2.psd"].file_id)
+    save(window, "corbeille.png", (1240, 780))
+    window.select_file(by_name["IMG_3381.jpg"].file_id)
     save(window, "corbeille-a-verifier.png")
-    save(controller.drop_widget, "widget-depot.png")
-    save(SettingsDialog(controller), "reglages.png", (760, 560))
-    save(HistoryWindow(controller), "historique.png", (1100, 520))
+
+    # Simulation d'un lot (les fichiers prêts), puis rangement réel dans la sandbox pour remplir l'Historique.
+    from tribin.service.bin import Validation
+    from tribin.ui.queue_panel import group_of
+    from tribin.ui.simulation_dialog import SimulationDialog
+
+    ready = [i for i in service.pending() if group_of(i) == "ready"]
+    prepared = service.prepare([Validation(i.file_id, i.proposal.target_folder, i.proposal.new_name, "accepted")
+                                for i in ready])
+    save(SimulationDialog(prepared.report), "simulation.png", (860, 640))
+    service.commit(prepared)
+    controller.refresh_queue()
+    window.show_page("history")
+    save(window, "historique.png")
+    window.show_page("bin")
+
+    widget = controller.drop_widget
+    for name, state in (("widget-repos.png", dict(total=0)), ("widget-analyse.png", dict(total=3, analyzing=1)),
+                        ("widget-pret.png", dict(total=7, ready=5, check=2))):
+        widget.set_state(**state)
+        save(widget, name)
+    save(SettingsDialog(controller), "reglages.png", (760, 600))
     save(OnboardingWizard(controller), "onboarding.png")
     window.refresh([])
     save(window, "corbeille-vide.png")

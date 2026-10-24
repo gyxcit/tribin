@@ -8,23 +8,27 @@ Spécification complète et état d'avancement : [SPEC.md](SPEC.md).
 
 <p align="center"><img src="docs/screenshots/logo.png" width="96" alt="Logo TriBin"></p>
 
-**Corbeille** : la file des fichiers en attente à gauche, la proposition du fichier sélectionné à droite
-(nom et dossier modifiables, explication de l'IA, autres pistes). La pastille indique la confiance :
-turquoise = sûr, corail = à vérifier.
+**Corbeille** : à gauche la file, triée en « À vérifier » et « Prêts à ranger » ; à droite le fichier
+sélectionné, nom **avant → après**, destination en fil d'Ariane, catégorie modifiable en un clic, jauge de
+confiance (turquoise = sûr, ambre = à regarder, corail = à vérifier) et les autres pistes de l'IA.
 
 ![Corbeille](docs/screenshots/corbeille.png)
 
-| Fichier à vérifier | Corbeille vide |
+| Fichier à vérifier | Simulation avant un rangement par lot |
 |---|---|
-| ![Fichier à vérifier](docs/screenshots/corbeille-a-verifier.png) | ![Corbeille vide](docs/screenshots/corbeille-vide.png) |
+| ![Fichier à vérifier](docs/screenshots/corbeille-a-verifier.png) | ![Simulation](docs/screenshots/simulation.png) |
 
-| Historique (tout est annulable) | Réglages |
+| Historique (par lot, tout est annulable) | Corbeille vide |
 |---|---|
-| ![Historique](docs/screenshots/historique.png) | ![Réglages](docs/screenshots/reglages.png) |
+| ![Historique](docs/screenshots/historique.png) | ![Corbeille vide](docs/screenshots/corbeille-vide.png) |
 
-| Premier lancement | Widget de dépôt flottant |
+| Widget de dépôt : au repos | analyse en cours | prêt à valider |
+|---|---|---|
+| ![Au repos](docs/screenshots/widget-repos.png) | ![Analyse](docs/screenshots/widget-analyse.png) | ![Prêt](docs/screenshots/widget-pret.png) |
+
+| Réglages | Premier lancement |
 |---|---|
-| ![Onboarding](docs/screenshots/onboarding.png) | ![Widget de dépôt](docs/screenshots/widget-depot.png) |
+| ![Réglages](docs/screenshots/reglages.png) | ![Onboarding](docs/screenshots/onboarding.png) |
 
 Captures réalisées avec des données de démonstration et une IA simulée ; pour les régénérer :
 `uv run python scripts/make_screenshots.py`.

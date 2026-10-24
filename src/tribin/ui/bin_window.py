@@ -1,4 +1,4 @@
-"""Fenêtre Corbeille : file des fichiers en attente (à gauche) et proposition du fichier sélectionné (à droite)."""
+"""Fenêtre principale : bandeau (navigation Corbeille / Historique), file d'attente et proposition détaillée."""
 
 from __future__ import annotations
 
@@ -8,12 +8,13 @@ from typing import TYPE_CHECKING
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QDragEnterEvent, QDropEvent, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
+    QApplication,
+    QButtonGroup,
     QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
-    QListWidget,
-    QListWidgetItem,
+    QLineEdit,
     QMainWindow,
     QMessageBox,
     QPushButton,
@@ -27,49 +28,15 @@ from tribin.convention.naming import is_valid_name
 from tribin.engine.proposer import normalize_rel
 from tribin.service.bin import Validation
 from tribin.service.queue import QueueItem
-from tribin.ui.bin_detail import DetailPanel, elided, item_pill, short_confidence, thumbnail
+from tribin.ui.bin_detail import DetailPanel
 from tribin.ui.drop_widget import dropped_paths
 from tribin.ui.icons import app_icon, logo_pixmap
-from tribin.ui.theme import pill_style
+from tribin.ui.queue_panel import QueuePanel
 
 if TYPE_CHECKING:
     from tribin.ui.app import AppController
 
-
-class QueueRow(QFrame):
-    """Ligne de la file : vignette, nom d'origine, destination proposée, pastille de confiance."""
-
-    def __init__(self, item: QueueItem):
-        super().__init__()
-        self.setObjectName("QueueRow")
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(10, 8, 10, 8)
-        thumb = QLabel()
-        thumb.setFixedSize(40, 40)
-        thumb.setPixmap(thumbnail(Path(item.staged_path), 40))
-        layout.addWidget(thumb)
-        texts = QVBoxLayout()
-        texts.setSpacing(1)
-        name = QLabel()
-        name.setStyleSheet("font-weight: 600; background: transparent;")
-        name.setText(elided(Path(item.original_path).name, name, 200))
-        name.setToolTip(Path(item.original_path).name)
-        target = item.proposal.target_folder if item.proposal and item.proposal.target_folder else ""
-        where = QLabel()
-        where.setObjectName("Muted")
-        where.setStyleSheet("background: transparent;")
-        where.setText(elided("→ " + "/".join(target.split("/")[-2:]), where, 200) if target else "")
-        texts.addWidget(name)
-        texts.addWidget(where)
-        layout.addLayout(texts, 1)
-        pill = QLabel(short_confidence(item))
-        pill.setStyleSheet(pill_style(item_pill(item)))
-        layout.addWidget(pill, 0, Qt.AlignmentFlag.AlignVCenter)
-
-    def set_selected(self, selected: bool) -> None:
-        self.setProperty("selected", "true" if selected else "false")
-        self.style().unpolish(self)
-        self.style().polish(self)
+PROVIDER_NAMES = {"anthropic": "Claude", "gemini": "Gemini", "mistral": "Mistral"}
 
 
 class BinWindow(QMainWindow):
@@ -78,49 +45,75 @@ class BinWindow(QMainWindow):
         self.c = controller
         self.items: list[QueueItem] = []
         self._edits: dict[str, dict] = {}  # file_id -> {"name", "folder", "alt"} modifiés par l'utilisateur
-        self.setWindowTitle("TriBin — Corbeille")
+        self.setWindowTitle("TriBin")
         self.setWindowIcon(app_icon())
         self.setAcceptDrops(True)
-        self.resize(1120, 640)
+        self.resize(1240, 780)
 
+        central = QWidget()
+        root = QVBoxLayout(central)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+        root.addWidget(self._header())
+        self.pages = QStackedWidget()
+        self.pages.addWidget(self._bin_page())
+        from tribin.ui.history import HistoryView
+
+        self.history = HistoryView(controller)
+        self.pages.addWidget(self.history)
+        root.addWidget(self.pages, 1)
+        self.setCentralWidget(central)
+        self.statusBar()
+
+        for key, slot in [(Qt.Key.Key_Return, self.validate_selected), (Qt.Key.Key_Enter, self.validate_selected),
+                          (Qt.Key.Key_E, self.edit_name), (Qt.Key.Key_A, self.choose_alternative),
+                          (Qt.Key.Key_Escape, self.skip), (Qt.Key.Key_R, self.return_selected)]:
+            shortcut = QShortcut(QKeySequence(key), self)
+            shortcut.activated.connect(lambda s=slot: self._shortcut(s))
+
+    # --- construction -------------------------------------------------------------------------
+
+    def _header(self) -> QFrame:
         header = QFrame()
         header.setObjectName("Header")
-        hl = QHBoxLayout(header)
-        hl.setContentsMargins(18, 12, 18, 12)
+        row = QHBoxLayout(header)
+        row.setContentsMargins(24, 12, 24, 12)
+        row.setSpacing(16)
         logo = QLabel()
         logo.setPixmap(logo_pixmap(34))
-        hl.addWidget(logo)
-        titles = QVBoxLayout()
-        titles.setSpacing(0)
-        title = QLabel("Corbeille")
-        title.setObjectName("HeaderTitle")
-        self.subtitle = QLabel()
-        self.subtitle.setObjectName("HeaderSubtitle")
-        titles.addWidget(title)
-        titles.addWidget(self.subtitle)
-        hl.addLayout(titles)
-        hl.addStretch()
-        for label, slot in (("Historique", self.c.show_history), ("Réglages", self.c.show_settings)):
+        brand = QLabel("TriBin")
+        brand.setObjectName("Brand")
+        row.addWidget(logo)
+        row.addWidget(brand)
+        self.nav = QButtonGroup(self)
+        self.nav_buttons = {}
+        for key, label in (("bin", "Corbeille"), ("history", "Historique")):
             button = QPushButton(label)
-            button.clicked.connect(slot)
-            hl.addWidget(button)
+            button.setObjectName("NavTab")
+            button.setCheckable(True)
+            button.clicked.connect(lambda _=False, k=key: self.show_page(k))
+            self.nav.addButton(button)
+            self.nav_buttons[key] = button
+            row.addWidget(button)
+        settings = QPushButton("Réglages")
+        settings.setObjectName("NavTab")
+        settings.clicked.connect(self.c.show_settings)
+        row.addWidget(settings)
+        row.addStretch()
+        self.ai_chip = QLabel()
+        self.ai_chip.setObjectName("HeaderChip")
+        self.pending_chip = QLabel()
+        self.pending_chip.setObjectName("PendingChip")
+        row.addWidget(self.ai_chip)
+        row.addWidget(self.pending_chip)
+        self.nav_buttons["bin"].setChecked(True)
+        return header
 
-        self.queue = QListWidget()
-        self.queue.setObjectName("Queue")
-        self.queue.setSpacing(2)
-        self.queue.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.queue.currentRowChanged.connect(self._row_changed)
-        self.validate_all_button = QPushButton("Tout valider")
-        self.validate_all_button.setObjectName("Primary")
-        self.validate_all_button.clicked.connect(self.validate_all)
-        left = QVBoxLayout()
-        left.setContentsMargins(0, 0, 0, 0)
-        left.addWidget(self.queue, 1)
-        left.addWidget(self.validate_all_button)
-        left_box = QWidget()
-        left_box.setLayout(left)
-        left_box.setFixedWidth(380)
-
+    def _bin_page(self) -> QWidget:
+        self.queue = QueuePanel()
+        self.queue.setFixedWidth(380)
+        self.queue.selection_changed.connect(self._selection_changed)
+        self.queue.validate_all_clicked.connect(self.validate_all)
         self.detail = DetailPanel()
         self.detail.edited.connect(self._detail_edited)
         self.detail.alternative_chosen.connect(self._apply_alternative)
@@ -128,94 +121,97 @@ class BinWindow(QMainWindow):
         self.detail.return_clicked.connect(self.return_selected)
         self.detail.skip_clicked.connect(self.skip)
         self.detail.browse_clicked.connect(self.pick_folder)
-
         body = QWidget()
-        bl = QHBoxLayout(body)
-        bl.setContentsMargins(16, 16, 16, 16)
-        bl.setSpacing(16)
-        bl.addWidget(left_box)
-        bl.addWidget(self.detail, 1)
+        layout = QHBoxLayout(body)
+        layout.setContentsMargins(24, 20, 24, 24)
+        layout.setSpacing(20)
+        layout.addWidget(self.queue)
+        layout.addWidget(self.detail, 1)
 
         empty = QWidget()
-        el = QVBoxLayout(empty)
-        el.addStretch()
+        column = QVBoxLayout(empty)
+        column.addStretch()
         big_logo = QLabel()
-        big_logo.setPixmap(logo_pixmap(112))
+        big_logo.setPixmap(logo_pixmap(96))
         big_logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        message = QLabel("Rien en attente.\nGlisse des fichiers ici ou sur le widget flottant : TriBin te propose où les ranger.")
+        title = QLabel("Tout est rangé")
+        title.setObjectName("Title")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        message = QLabel("Glisse de nouveaux fichiers sur le widget ou sur cette fenêtre :\n"
+                         "TriBin te proposera où les ranger.")
         message.setObjectName("Empty")
         message.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        el.addWidget(big_logo)
-        el.addWidget(message)
-        el.addStretch()
+        to_history = QPushButton("Voir l'historique")
+        to_history.setObjectName("Link")
+        to_history.clicked.connect(lambda: self.show_page("history"))
+        for widget in (big_logo, title, message):
+            column.addWidget(widget)
+        column.addWidget(to_history, 0, Qt.AlignmentFlag.AlignCenter)
+        column.addStretch()
 
-        self.pages = QStackedWidget()
-        self.pages.addWidget(empty)
-        self.pages.addWidget(body)
-        central = QWidget()
-        cl = QVBoxLayout(central)
-        cl.setContentsMargins(0, 0, 0, 0)
-        cl.setSpacing(0)
-        cl.addWidget(header)
-        cl.addWidget(self.pages, 1)
-        self.setCentralWidget(central)
-        self.statusBar()
+        self.bin_pages = QStackedWidget()
+        self.bin_pages.addWidget(empty)
+        self.bin_pages.addWidget(body)
+        return self.bin_pages
 
-        for key, slot in [(Qt.Key.Key_Return, self.validate_selected), (Qt.Key.Key_Enter, self.validate_selected),
-                          (Qt.Key.Key_E, self.edit_name), (Qt.Key.Key_A, self.choose_alternative),
-                          (Qt.Key.Key_Escape, self.skip), (Qt.Key.Key_R, self.return_selected)]:
-            shortcut = QShortcut(QKeySequence(key), self.queue)  # pas pendant la saisie d'un nom
-            shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-            shortcut.activated.connect(slot)
+    def show_page(self, key: str) -> None:
+        self.nav_buttons[key].setChecked(True)
+        if key == "history":
+            self.history.reload()
+            self.pages.setCurrentWidget(self.history)
+        else:
+            self.pages.setCurrentWidget(self.bin_pages)
 
     # --- affichage ----------------------------------------------------------------------------
 
     def refresh(self, items: list[QueueItem]) -> None:
-        current = self.current_item()
-        current_id = current.file_id if current else None
+        current = self.queue.current_file_id()
         self.items = items
         self._edits = {k: v for k, v in self._edits.items() if any(i.file_id == k for i in items)}
-        self.queue.blockSignals(True)
-        self.queue.clear()
-        for item in items:
-            row = QueueRow(item)
-            entry = QListWidgetItem()
-            entry.setSizeHint(row.sizeHint())
-            self.queue.addItem(entry)
-            self.queue.setItemWidget(entry, row)
-        self.queue.blockSignals(False)
-        ready = sum(1 for i in items if i.status == "ready" and i.proposal)
-        self.subtitle.setText(f"{len(items)} fichier(s) en attente · {ready} prêt(s)" if items else "Aucun fichier en attente")
-        self.validate_all_button.setText(f"Tout valider ({ready})")
-        self.validate_all_button.setEnabled(ready > 0)
-        self.pages.setCurrentIndex(1 if items else 0)
-        if items:
-            index = next((n for n, i in enumerate(items) if i.file_id == current_id), 0)
-            self.queue.setCurrentRow(index)
-            self._row_changed(index)
+        self.pending_chip.setText(f"{len(items)} en attente")
+        self.pending_chip.setVisible(bool(items))
+        self._update_ai_chip()
+        self.bin_pages.setCurrentIndex(1 if items else 0)
+        self.queue.set_items(items, current)
+
+    def _update_ai_chip(self) -> None:
+        try:
+            settings = self.c.service.ai_settings()
+            name = PROVIDER_NAMES.get(settings.provider, settings.provider)
+            ok = bool(settings.api_key)
+            text = f"IA : {name} · {settings.model}" if ok else f"IA : {name} — clé manquante"
+        except Exception:
+            ok, text = False, "IA non configurée"
+        self.ai_chip.setText(("● " if ok else "○ ") + text)
+        self.ai_chip.setToolTip("Fournisseur et modèle d'IA (modifiables dans les Réglages)")
 
     def current_item(self) -> QueueItem | None:
-        row = self.queue.currentRow()
-        return self.items[row] if 0 <= row < len(self.items) else None
+        file_id = self.queue.current_file_id()
+        return next((i for i in self.items if i.file_id == file_id), None)
+
+    def select_file(self, file_id: str) -> None:
+        self.queue.select_file(file_id)
+
+    def _categories(self) -> list[str]:
+        try:
+            return self.c.service.convention().category_codes()
+        except Exception:
+            return []
 
     def _values(self, item: QueueItem) -> tuple[str, str]:
         edit = self._edits.get(item.file_id, {})
         p = item.proposal
         return edit.get("name", p.new_name if p else ""), edit.get("folder", p.target_folder if p else "")
 
-    def _row_changed(self, row: int) -> None:
-        for n in range(self.queue.count()):
-            widget = self.queue.itemWidget(self.queue.item(n))
-            if widget:
-                widget.set_selected(n == row)
-        item = self.current_item()
-        self.detail.show_item(item, *(self._values(item) if item else ("", "")))
+    def _selection_changed(self, file_id: str) -> None:
+        item = self.current_item() if file_id else None
+        self.detail.show_item(item, *(self._values(item) if item else ("", "")), categories=self._categories())
 
     def _detail_edited(self) -> None:
         item = self.current_item()
         if item:
             self._edits.setdefault(item.file_id, {}).update(name=self.detail.name.text().strip(),
-                                                           folder=self.detail.folder.text().strip())
+                                                           folder=self.detail.folder)
 
     def _apply_alternative(self, index: int) -> None:
         item = self.current_item()
@@ -223,9 +219,15 @@ class BinWindow(QMainWindow):
             return
         alt = item.proposal.alternatives[index]
         self._edits[item.file_id] = {"name": alt.new_name, "folder": alt.target_folder, "alt": index}
-        self.detail.show_item(item, alt.new_name, alt.target_folder)
+        self.detail.show_item(item, alt.new_name, alt.target_folder, categories=self._categories())
 
     # --- actions ------------------------------------------------------------------------------
+
+    def _shortcut(self, slot) -> None:
+        """Raccourcis inactifs pendant la saisie d'un texte (le nom, la recherche)."""
+        if isinstance(QApplication.focusWidget(), QLineEdit) or self.pages.currentWidget() is not self.bin_pages:
+            return
+        slot()
 
     def _validation(self, item: QueueItem) -> Validation | None:
         p = item.proposal
@@ -250,7 +252,9 @@ class BinWindow(QMainWindow):
             self._validate([item])
 
     def validate_all(self) -> None:
-        self._validate(self.items, force_simulation=True)
+        from tribin.ui.queue_panel import group_of
+
+        self._validate([i for i in self.items if group_of(i) == "ready"], force_simulation=True)
 
     def _validate(self, items: list[QueueItem], force_simulation: bool = False) -> None:
         for item in items:
@@ -266,8 +270,7 @@ class BinWindow(QMainWindow):
         self.c.validate(validations, force_simulation)
 
     def edit_name(self) -> None:
-        self.detail.name.setFocus()
-        self.detail.name.selectAll()
+        self.detail.focus_name()
 
     def pick_folder(self) -> None:
         item = self.current_item()
@@ -282,7 +285,7 @@ class BinWindow(QMainWindow):
         if not is_within(Path(chosen), root):
             QMessageBox.warning(self, "Hors racine", f"Choisis un dossier à l'intérieur de {root}.")
             return
-        self.detail.folder.setText(Path(chosen).resolve().relative_to(root.resolve()).as_posix())
+        self.detail.set_folder(Path(chosen).resolve().relative_to(root.resolve()).as_posix())
 
     def choose_alternative(self) -> None:
         item = self.current_item()
@@ -292,9 +295,7 @@ class BinWindow(QMainWindow):
             self.statusBar().showMessage("Pas d'autre piste pour ce fichier.", 4000)
 
     def skip(self) -> None:
-        row = self.queue.currentRow()
-        if row + 1 < len(self.items):
-            self.queue.setCurrentRow(row + 1)
+        self.queue.select_next()
 
     def return_selected(self) -> None:
         item = self.current_item()

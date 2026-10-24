@@ -66,7 +66,7 @@ class AppController:
         self.drop_widget.clicked.connect(self.show_bin)
         self.tray = Tray(self)
         self._tasks: set = set()
-        self._history = None
+        self.confirm_simulation = self._show_simulation  # remplaçable dans les tests
         if show_ui:
             self.tray.show()
             screen = app.primaryScreen().availableGeometry()
@@ -97,10 +97,14 @@ class AppController:
     # --- file d'attente -----------------------------------------------------------------------
 
     def refresh_queue(self) -> None:
+        from tribin.ui.queue_panel import group_of
+
         items = self.service.pending()
         self.bin_window.refresh(items)
         self.tray.set_count(len(items))
-        self.drop_widget.set_count(len(items))
+        groups = [group_of(i) for i in items]
+        self.drop_widget.set_state(total=len(items), analyzing=groups.count("wait"), ready=groups.count("ready"),
+                                   check=groups.count("check"))
 
     def drop_paths(self, paths: list[Path]) -> None:
         for path in paths:
@@ -129,17 +133,9 @@ class AppController:
 
     def validate(self, validations: list[Validation], force_simulation: bool = False) -> None:
         def prepared(p) -> None:
-            if not p.report.ok:
-                QMessageBox.warning(self.bin_window, "Simulation : problème détecté",
-                                    "Rien n'a été déplacé.\n\n" + "\n".join(p.report.lines()))
-                return
-            if p.needs_confirmation or force_simulation:
-                box = QMessageBox(QMessageBox.Icon.Question, "Simulation", f"{len(p.validations)} fichier(s) à ranger. "
-                                  "Voici ce qui va être fait (rien n'a encore été touché) :",
-                                  QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel, self.bin_window)
-                box.setDetailedText("\n".join(p.report.lines()))
-                box.setInformativeText("\n".join(p.report.lines()[:12]))
-                if box.exec() != QMessageBox.StandardButton.Ok:
+            if not p.report.ok or p.needs_confirmation or force_simulation:
+                # Lot, création de dossier ou problème : la simulation DOIT être montrée (section 3.1).
+                if not self.confirm_simulation(p.report) or not p.report.ok:
                     return
             self._run(self.service.commit, p, on_done=committed)
 
@@ -189,11 +185,14 @@ class AppController:
         self.bin_window.raise_()
         self.bin_window.activateWindow()
 
-    def show_history(self) -> None:
-        from tribin.ui.history import HistoryWindow
+    def _show_simulation(self, report) -> bool:
+        from tribin.ui.simulation_dialog import SimulationDialog
 
-        self._history = HistoryWindow(self)
-        self._history.show()
+        return SimulationDialog(report, self.bin_window).exec() == SimulationDialog.DialogCode.Accepted
+
+    def show_history(self) -> None:
+        self.show_bin()
+        self.bin_window.show_page("history")
 
     def show_settings(self) -> None:
         from tribin.ui.settings import SettingsDialog
