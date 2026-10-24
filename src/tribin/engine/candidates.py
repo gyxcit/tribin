@@ -3,11 +3,19 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from rapidfuzz import fuzz, process
+
 from tribin.convention.loader import Convention
+from tribin.convention.naming import split_extension
+from tribin.convention.structure import matches_template
+from tribin.engine.clients import normalize_text
 from tribin.fs.filters import INTERNAL_DIRS, ExclusionMatcher, is_hidden, is_package
+from tribin.mapping.profiles import FolderProfile
+from tribin.models import FileInfo
 
 
 @dataclass
@@ -46,6 +54,48 @@ def walk_folders(root: Path, convention: Convention, max_depth: int = 4, limit: 
             stack.append((path, child_rel, depth + 1))
     found.sort(key=str.lower)
     return found[:limit] if limit else found
+
+
+STOPWORDS = {"les", "des", "pour", "avec", "une", "dans", "sur", "par", "the", "and", "aux", "est", "pas", "fichier",
+              "fichiers", "date", "total", "eur", "objet", "projet", "client"}
+PROJECT_CODE = re.compile(r"(?<!\d)(\d{4}-\d{2,4})(?!\d)")
+RESERVED_FOR_OTHERS = 3
+
+
+def _tokens(text: str) -> set[str]:
+    return {t for t in normalize_text(text).split() if len(t) >= 3 and t not in STOPWORDS}
+
+
+def _folder_score(file_tokens: set[str], codes: set[str], profile: FolderProfile, convention: Convention) -> float:
+    folder_tokens = _tokens(f"{profile.rel.replace('/', ' ')} {profile.description} {' '.join(profile.samples)}")
+    score = 0.0
+    for token in folder_tokens:
+        if token in file_tokens:
+            score += 10
+        elif len(token) >= 5:
+            match = process.extractOne(token, file_tokens, scorer=fuzz.ratio, score_cutoff=85)
+            if match:
+                score += 6
+    score += 40 * sum(1 for code in codes if code in profile.rel)
+    if matches_template(profile.rel, convention):
+        score += 5
+    return score
+
+
+def select_candidates(info: FileInfo, profiles: list[FolderProfile], convention: Convention,
+                      client_code: str | None, limit: int = 15) -> list[Candidate]:
+    """Les `limit` dossiers les plus pertinents ; ceux du client détecté sont toujours inclus en priorité."""
+    file_tokens = _tokens(f"{split_extension(info.name)[0]} {info.text[:2000]} {' '.join(info.metadata.values())}")
+    codes = set(PROJECT_CODE.findall(f"{info.name} {info.text}"))
+    scored = [(_folder_score(file_tokens, codes, p, convention), p) for p in profiles]
+    scored.sort(key=lambda sp: (-sp[0], sp[1].rel.lower()))
+    prefix = f"{client_code.lower()}/" if client_code else None
+    mine = [p for _, p in scored if prefix and (p.rel.lower() + "/").startswith(prefix)]
+    mine_ids = {id(p) for p in mine}
+    others = [p for _, p in scored if id(p) not in mine_ids]
+    chosen = mine[: max(0, limit - RESERVED_FOR_OTHERS)] if others else mine[:limit]
+    chosen += others[: limit - len(chosen)]
+    return [Candidate(p.rel, p.description or p.auto_description()) for p in sorted(chosen, key=lambda p: p.rel.lower())]
 
 
 def phase1_candidates(root: Path, convention: Convention) -> list[Candidate]:
