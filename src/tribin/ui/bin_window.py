@@ -1,4 +1,4 @@
-"""Fenêtre principale : bandeau (navigation Corbeille / Historique), file d'attente et proposition détaillée."""
+"""Fenêtre principale, en trois colonnes : navigation, fichiers à ranger, proposition détaillée."""
 
 from __future__ import annotations
 
@@ -29,6 +29,7 @@ from tribin.engine.proposer import normalize_rel
 from tribin.service.bin import Validation
 from tribin.service.queue import QueueItem
 from tribin.ui.bin_detail import DetailPanel
+from tribin.ui.components import divider
 from tribin.ui.drop_widget import dropped_paths
 from tribin.ui.icons import app_icon, logo_pixmap
 from tribin.ui.queue_panel import QueuePanel
@@ -37,6 +38,14 @@ if TYPE_CHECKING:
     from tribin.ui.app import AppController
 
 PROVIDER_NAMES = {"anthropic": "Claude", "gemini": "Gemini", "mistral": "Mistral"}
+
+
+def nav_item(text: str, checkable: bool = False) -> QPushButton:
+    button = QPushButton(text)
+    button.setObjectName("NavItem")
+    button.setCheckable(checkable)
+    button.setCursor(Qt.CursorShape.PointingHandCursor)
+    return button
 
 
 class BinWindow(QMainWindow):
@@ -48,13 +57,13 @@ class BinWindow(QMainWindow):
         self.setWindowTitle("TriBin")
         self.setWindowIcon(app_icon())
         self.setAcceptDrops(True)
-        self.resize(1240, 780)
+        self.resize(1280, 800)
 
         central = QWidget()
-        root = QVBoxLayout(central)
+        root = QHBoxLayout(central)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
-        root.addWidget(self._header())
+        root.addWidget(self._sidebar())
         self.pages = QStackedWidget()
         self.pages.addWidget(self._bin_page())
         from tribin.ui.history import HistoryView
@@ -73,41 +82,51 @@ class BinWindow(QMainWindow):
 
     # --- construction -------------------------------------------------------------------------
 
-    def _header(self) -> QFrame:
-        header = QFrame()
-        header.setObjectName("Header")
-        row = QHBoxLayout(header)
-        row.setContentsMargins(24, 12, 24, 12)
-        row.setSpacing(16)
+    def _sidebar(self) -> QFrame:
+        side = QFrame()
+        side.setObjectName("Sidebar")
+        side.setFixedWidth(224)
+        col = QVBoxLayout(side)
+        col.setContentsMargins(12, 16, 12, 12)
+        col.setSpacing(2)
+        brand_row = QHBoxLayout()
+        brand_row.setContentsMargins(8, 4, 8, 16)
+        brand_row.setSpacing(10)
         logo = QLabel()
-        logo.setPixmap(logo_pixmap(34))
+        logo.setPixmap(logo_pixmap(28))
         brand = QLabel("TriBin")
         brand.setObjectName("Brand")
-        row.addWidget(logo)
-        row.addWidget(brand)
+        brand_row.addWidget(logo)
+        brand_row.addWidget(brand)
+        brand_row.addStretch()
+        col.addLayout(brand_row)
         self.nav = QButtonGroup(self)
-        self.nav_buttons = {}
-        for key, label in (("bin", "Corbeille"), ("history", "Historique")):
-            button = QPushButton(label)
-            button.setObjectName("NavTab")
-            button.setCheckable(True)
+        self.nav_buttons: dict[str, QPushButton] = {}
+        for key, label in (("bin", "À ranger"), ("history", "Historique")):
+            button = nav_item(label, checkable=True)
             button.clicked.connect(lambda _=False, k=key: self.show_page(k))
             self.nav.addButton(button)
             self.nav_buttons[key] = button
-            row.addWidget(button)
-        settings = QPushButton("Réglages")
-        settings.setObjectName("NavTab")
+            col.addWidget(button)
+        self.pending_count = QLabel()
+        self.pending_count.setObjectName("NavCount")
+        self.pending_count.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        count_row = QHBoxLayout(self.nav_buttons["bin"])
+        count_row.setContentsMargins(0, 0, 10, 0)
+        count_row.addStretch()
+        count_row.addWidget(self.pending_count)
+        col.addStretch()
+        col.addWidget(divider())
+        col.addSpacing(8)
+        settings = nav_item("Réglages")
         settings.clicked.connect(self.c.show_settings)
-        row.addWidget(settings)
-        row.addStretch()
+        col.addWidget(settings)
         self.ai_chip = QLabel()
-        self.ai_chip.setObjectName("HeaderChip")
-        self.pending_chip = QLabel()
-        self.pending_chip.setObjectName("PendingChip")
-        row.addWidget(self.ai_chip)
-        row.addWidget(self.pending_chip)
+        self.ai_chip.setObjectName("AiStatus")
+        self.ai_chip.setTextFormat(Qt.TextFormat.RichText)
+        col.addWidget(self.ai_chip)
         self.nav_buttons["bin"].setChecked(True)
-        return header
+        return side
 
     def _bin_page(self) -> QWidget:
         self.queue = QueuePanel()
@@ -123,29 +142,30 @@ class BinWindow(QMainWindow):
         self.detail.browse_clicked.connect(self.pick_folder)
         body = QWidget()
         layout = QHBoxLayout(body)
-        layout.setContentsMargins(24, 20, 24, 24)
-        layout.setSpacing(20)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
         layout.addWidget(self.queue)
         layout.addWidget(self.detail, 1)
 
         empty = QWidget()
         column = QVBoxLayout(empty)
+        column.setSpacing(8)
         column.addStretch()
         big_logo = QLabel()
-        big_logo.setPixmap(logo_pixmap(96))
+        big_logo.setPixmap(logo_pixmap(72))
         big_logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title = QLabel("Tout est rangé")
         title.setObjectName("Title")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        message = QLabel("Glisse de nouveaux fichiers sur le widget ou sur cette fenêtre :\n"
-                         "TriBin te proposera où les ranger.")
+        message = QLabel("Glissez de nouveaux fichiers sur le widget ou sur cette fenêtre :\n"
+                         "TriBin vous proposera où les ranger.")
         message.setObjectName("Empty")
         message.setAlignment(Qt.AlignmentFlag.AlignCenter)
         to_history = QPushButton("Voir l'historique")
-        to_history.setObjectName("Link")
         to_history.clicked.connect(lambda: self.show_page("history"))
         for widget in (big_logo, title, message):
             column.addWidget(widget)
+        column.addSpacing(8)
         column.addWidget(to_history, 0, Qt.AlignmentFlag.AlignCenter)
         column.addStretch()
 
@@ -168,8 +188,7 @@ class BinWindow(QMainWindow):
         current = self.queue.current_file_id()
         self.items = items
         self._edits = {k: v for k, v in self._edits.items() if any(i.file_id == k for i in items)}
-        self.pending_chip.setText(f"{len(items)} en attente")
-        self.pending_chip.setVisible(bool(items))
+        self.pending_count.setText(str(len(items)) if items else "")
         self._update_ai_chip()
         self.bin_pages.setCurrentIndex(1 if items else 0)
         self.queue.set_items(items, current)
@@ -179,11 +198,13 @@ class BinWindow(QMainWindow):
             settings = self.c.service.ai_settings()
             name = PROVIDER_NAMES.get(settings.provider, settings.provider)
             ok = bool(settings.api_key)
-            text = f"IA : {name} · {settings.model}" if ok else f"IA : {name} — clé manquante"
+            text = f"IA : {name}" if ok else f"IA : {name}, clé manquante"
+            tip = f"Modèle : {settings.model}. Modifiable dans les Réglages."
         except Exception:
-            ok, text = False, "IA non configurée"
-        self.ai_chip.setText(("● " if ok else "○ ") + text)
-        self.ai_chip.setToolTip("Fournisseur et modèle d'IA (modifiables dans les Réglages)")
+            ok, text, tip = False, "IA non configurée", "À configurer dans les Réglages."
+        color = "#14B8A6" if ok else "#F0605A"
+        self.ai_chip.setText(f'<span style="color:{color}">●</span>&nbsp; {text}')
+        self.ai_chip.setToolTip(tip)
 
     def current_item(self) -> QueueItem | None:
         file_id = self.queue.current_file_id()
@@ -264,8 +285,8 @@ class BinWindow(QMainWindow):
                 return
         validations = [v for v in (self._validation(i) for i in items) if v]
         if not validations:
-            QMessageBox.information(self, "TriBin", "Aucun fichier prêt à ranger : complète le nom et le dossier, "
-                                    "ou attends la fin de l'analyse.")
+            QMessageBox.information(self, "TriBin", "Aucun fichier prêt à ranger : complétez le nom et le dossier, "
+                                    "ou attendez la fin de l'analyse.")
             return
         self.c.validate(validations, force_simulation)
 
@@ -283,7 +304,7 @@ class BinWindow(QMainWindow):
         if not chosen:
             return
         if not is_within(Path(chosen), root):
-            QMessageBox.warning(self, "Hors racine", f"Choisis un dossier à l'intérieur de {root}.")
+            QMessageBox.warning(self, "Hors racine", f"Choisissez un dossier à l'intérieur de {root}.")
             return
         self.detail.set_folder(Path(chosen).resolve().relative_to(root.resolve()).as_posix())
 

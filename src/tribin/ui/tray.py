@@ -18,7 +18,7 @@ class Tray(QSystemTrayIcon):
         super().__init__(app_icon())
         self.c = controller
         menu = QMenu()
-        for label, slot in [("Corbeille", controller.show_bin), ("Historique", controller.show_history),
+        for label, slot in [("Fichiers à ranger", controller.show_bin), ("Historique", controller.show_history),
                             ("Réglages", controller.show_settings)]:
             action = QAction(label, menu)
             action.triggered.connect(slot)

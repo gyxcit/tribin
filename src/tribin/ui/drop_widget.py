@@ -59,7 +59,7 @@ class DropWidget(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAcceptDrops(True)
         self.setStyleSheet(STYLE)
-        self.setToolTip("Glisse tes fichiers ici pour les trier.\nClic : ouvrir la corbeille · glisser : déplacer")
+        self.setToolTip("Glissez vos fichiers ici pour les trier.\nClic : ouvrir TriBin · glisser : déplacer")
         self.counts = {"total": 0, "analyzing": 0, "ready": 0, "check": 0}
         self._hovering = False
         self._drag_from: QPoint | None = None
@@ -130,7 +130,7 @@ class DropWidget(QWidget):
         chips.addWidget(self.ready_pill)
         chips.addWidget(self.check_pill)
         chips.addStretch()
-        open_button = QPushButton("Ouvrir la corbeille")
+        open_button = QPushButton("Ouvrir TriBin")
         open_button.setObjectName("Primary")
         open_button.clicked.connect(self.clicked)
         column.addLayout(top)

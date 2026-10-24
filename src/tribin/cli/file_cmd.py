@@ -124,7 +124,7 @@ def _learn(ctx, original_name: str, proposal: Proposal, folder: str, move, decis
     remember_placement(db, move.operation_id, move.destination, ctx.root, folder, move.destination.name,
                        original_name, proposal.client_hint)
     if decision != "accepted":
-        maybe_summarize(db, ctx.llm) if not result.failed else 1
+        maybe_summarize(db, ctx.llm)
 
 
 def _print_result(operations, batch_id: str) -> None:

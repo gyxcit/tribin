@@ -8,17 +8,18 @@ Spécification complète et état d'avancement : [SPEC.md](SPEC.md).
 
 <p align="center"><img src="docs/screenshots/logo.png" width="96" alt="Logo TriBin"></p>
 
-**Corbeille** : à gauche la file, triée en « À vérifier » et « Prêts à ranger » ; à droite le fichier
-sélectionné, nom **avant → après**, destination en fil d'Ariane, catégorie modifiable en un clic, jauge de
-confiance (turquoise = sûr, ambre = à regarder, corail = à vérifier) et les autres pistes de l'IA.
+**Fenêtre principale**, en trois colonnes : la navigation ; les fichiers à ranger, groupés en « À vérifier » et
+« Prêts à ranger », avec recherche et onglets ; puis la proposition de l'IA pour le fichier sélectionné : nouveau
+nom, dossier, catégorie, confiance (turquoise = sûr, ambre = à regarder, corail = à vérifier), explication et autres
+possibilités. Les actions sont en bas : « Ranger ici » (Entrée), « Passer » (Échap), « Renvoyer à l'origine » (R).
 
-![Corbeille](docs/screenshots/corbeille.png)
+![Fichiers à ranger](docs/screenshots/corbeille.png)
 
 | Fichier à vérifier | Simulation avant un rangement par lot |
 |---|---|
 | ![Fichier à vérifier](docs/screenshots/corbeille-a-verifier.png) | ![Simulation](docs/screenshots/simulation.png) |
 
-| Historique (par lot, tout est annulable) | Corbeille vide |
+| Historique (par lot, tout est annulable) | Tout est rangé |
 |---|---|
 | ![Historique](docs/screenshots/historique.png) | ![Corbeille vide](docs/screenshots/corbeille-vide.png) |
 
@@ -26,18 +27,21 @@ confiance (turquoise = sûr, ambre = à regarder, corail = à vérifier) et les 
 |---|---|---|
 | ![Au repos](docs/screenshots/widget-repos.png) | ![Analyse](docs/screenshots/widget-analyse.png) | ![Prêt](docs/screenshots/widget-pret.png) |
 
-**Premier lancement**, en quatre écrans courts : bienvenue, dossier à ranger (la convention est déduite
-automatiquement), quelques questions facultatives, choix de l'IA (Claude, Gemini ou Mistral).
+**Premier lancement**, en quatre étapes listées à gauche : bienvenue, dossiers à ranger et à ne jamais toucher
+(choisis un par un ; la convention est déduite automatiquement), quelques questions facultatives, choix de l'IA
+(Mistral, Claude ou Gemini).
 
-| 1. Bienvenue | 2. Ton dossier |
+| 1. Bienvenue | 2. Vos dossiers |
 |---|---|
-| ![Bienvenue](docs/screenshots/onboarding.png) | ![Ton dossier](docs/screenshots/onboarding-2.png) |
+| ![Bienvenue](docs/screenshots/onboarding.png) | ![Vos dossiers](docs/screenshots/onboarding-2.png) |
 
-| 3. Quelques mots sur toi | 4. Ton IA |
+| 3. Votre activité | 4. Intelligence artificielle |
 |---|---|
 | ![Questions](docs/screenshots/onboarding-3.png) | ![IA](docs/screenshots/onboarding-4.png) |
 
-![Réglages](docs/screenshots/reglages.png)
+| Réglages › Dossiers | Réglages › Intelligence artificielle |
+|---|---|
+| ![Réglages](docs/screenshots/reglages.png) | ![Réglages IA](docs/screenshots/reglages-ia.png) |
 
 Captures réalisées avec des données de démonstration et une IA simulée ; pour les régénérer :
 `uv run python scripts/make_screenshots.py`.
@@ -84,8 +88,8 @@ uv sync --extra ui --extra gemini --extra mistral
 
 Copier `.env.example` en `.env`, choisir le fournisseur d'IA (`TRIBIN_PROVIDER=anthropic`, `gemini` ou `mistral`) et mettre
 la clé correspondante (`ANTHROPIC_API_KEY`, `GEMINI_API_KEY` ou `MISTRAL_API_KEY`). Pour Gemini et Mistral, installer
-aussi leur module : `uv sync --extra ui --extra gemini --extra mistral`. Dans l'application, le fournisseur se choisit dans Réglages > IA et
-confidentialité, et la clé est rangée dans le trousseau du système.
+aussi leur module : `uv sync --extra ui --extra gemini --extra mistral`. Dans l'application, le fournisseur se choisit dans Réglages › Intelligence
+artificielle, et la clé est rangée dans le trousseau du système.
 
 ```bash
 uv run python scripts/make_sandbox.py
@@ -101,15 +105,15 @@ uv run pytest
 uv run python -m tribin.ui.app
 ```
 
-Au premier lancement : questions de contexte, choix des racines et des zones exclues, puis de la convention
-(fichier existant, déduite de l'existant, créée par l'IA ou exemple). Ensuite :
+Au premier lancement : dossiers à ranger et à ne jamais toucher, convention (déduite de l'existant, ou un
+fichier déjà prêt), quelques questions facultatives, choix de l'IA. Ensuite :
 
-- glisser des fichiers sur le **widget flottant** (toujours au premier plan) ou sur la **fenêtre Corbeille** ;
+- glisser des fichiers sur le **widget flottant** (toujours au premier plan) ou sur la **fenêtre principale** ;
 - Windows : glisser sur le raccourci du bureau, ou clic droit **Envoyer vers > TriBin** (à créer dans
-  Réglages > Système) ;
+  Réglages › Système) ;
 - macOS (application empaquetée) : glisser sur l'icône du Dock.
 
-Dans la Corbeille : `Entrée` valider, `E` éditer le nom, `A` alternatives, `Échap` passer, `R` renvoyer à l'origine.
+Dans la fenêtre principale : `Entrée` ranger, `E` modifier le nom, `A` autre possibilité, `Échap` passer, `R` renvoyer à l'origine.
 Chaque rangement s'annule depuis l'Historique.
 
 ## Ligne de commande

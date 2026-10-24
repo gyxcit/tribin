@@ -114,9 +114,13 @@ def main() -> None:
                         ("widget-pret.png", dict(total=7, ready=5, check=2))):
         widget.set_state(**state)
         save(widget, name)
-    save(SettingsDialog(controller), "reglages.png", (760, 600))
+    settings_dialog = SettingsDialog(controller)
+    save(settings_dialog, "reglages.png", (960, 660))
+    settings_dialog.pages.setCurrentIndex(1)
+    settings_dialog.nav.button(1).setChecked(True)
+    save(settings_dialog, "reglages-ia.png")
     wizard = OnboardingWizard(controller)
-    wizard.resize(760, 600)
+    wizard.resize(820, 640)
     save(wizard, "onboarding.png")
     wizard.accept_privacy.setChecked(True)
     for step in range(2, 5):

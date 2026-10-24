@@ -87,7 +87,7 @@ def test_drop_shows_proposal_in_bin_window(qapp, controller):
     assert "Devis de l'imprimeur" in win.detail.reasoning.text()
     assert win.detail.pill.text() == "Sûr · 90 %"
     assert win.detail.original.text() == "scan0042.pdf"
-    assert "1 fichier" in controller.tray.toolTip() and win.pending_chip.text() == "1 en attente"
+    assert "1 fichier" in controller.tray.toolTip() and win.pending_count.text() == "1"
 
 
 def test_ui_stays_responsive_with_20_files(qapp, controller):
@@ -124,10 +124,11 @@ def test_category_in_one_click(qapp, controller):
     assert wait(qapp, lambda: ready_items(controller, 1))
     controller.refresh_queue()
     win = controller.bin_window
-    buttons = {b.property("code"): b for b in win.detail.cat_group.buttons()}
-    assert set(buttons) == {"01_Brief", "02_Creation", "03_Execution", "04_Livrables", "05_Sources", "06_Admin"}
-    assert buttons["06_Admin"].isChecked()
-    buttons["01_Brief"].click()
+    combo = win.detail.category
+    codes = [combo.itemData(i) for i in range(combo.count())]
+    assert codes == ["01_Brief", "02_Creation", "03_Execution", "04_Livrables", "05_Sources", "06_Admin"]
+    assert combo.currentData() == "06_Admin" and combo.isEnabled()
+    combo.activated.emit(codes.index("01_Brief"))
     assert win.detail.folder == f"{NOEL}/01_Brief"
     validation = win._validation(win.current_item())
     assert validation.target_folder == f"{NOEL}/01_Brief" and validation.decision == "edited"
@@ -171,7 +172,7 @@ def test_batch_shows_simulation_then_history_and_undo(qapp, controller, monkeypa
     undo.click()
     placed = controller.sb / "root" / NOEL / "06_Admin" / "2026-10-12_ACME_2026-042_Devis-impression.pdf"
     assert not placed.exists()
-    assert any(w.text() == "ANNULÉ" for w in history.findChildren(QLabel))
+    assert any(w.text() == "Annulé" for w in history.findChildren(QLabel))
 
 
 def test_simulation_dialog_blocks_on_problem(qapp, controller):
@@ -234,9 +235,14 @@ def test_empty_state_edits_and_search(qapp, controller):
     controller.refresh_queue()  # une analyse qui se termine rafraîchit la liste
     win.select_file(first.file_id)
     assert win.detail.name.text() == "modifie.pdf"  # la modification n'est pas perdue
-    assert win.queue.validate_all.label.text() == "Tout valider (2 prêts)"
+    assert win.queue.validate_all.label.text() == "Ranger les 2 prêts"
     win.queue.search.setText("BC_")
     assert win.queue.order == [second.file_id]  # la recherche filtre la file
+    win.queue.search.clear()
+    win.queue.set_tab("check")
+    assert win.queue.order == []  # les deux fichiers sont prêts : rien à vérifier
+    win.select_file(first.file_id)  # sélectionner un fichier masqué revient à « Tous »
+    assert win.queue.tab == "all" and win.queue.current_file_id() == first.file_id
 
 
 def test_onboarding_simple_flow(qapp, controller, monkeypatch):
@@ -256,7 +262,9 @@ def test_onboarding_simple_flow(qapp, controller, monkeypatch):
     wizard.chips["types"].group.buttons()[0].click()
     wizard.chips["types"].group.buttons()[1].click()
     assert wizard.chips["types"].value() == ["Visuels", "Documents"]
-    wizard.provider.setCurrentIndex(wizard.provider.findData("mistral"))
+    wizard.set_provider("gemini")
+    assert wizard.provider() == "gemini" and "aistudio.google.com" in wizard.key_hint.text()
+    wizard.provider_cards["mistral"].mousePressEvent(None)  # un clic sur la carte la sélectionne
     wizard.api_key.setText("cle-de-test")
     wizard.accept()
     cfg = controller.service.config

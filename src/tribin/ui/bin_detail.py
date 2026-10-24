@@ -1,14 +1,17 @@
-"""Panneau de détail de la Corbeille : avant → après, destination, catégorie en un clic, confiance, actions."""
+"""Colonne de droite : le fichier sélectionné, la proposition de l'IA (nom, dossier, catégorie, confiance),
+les autres possibilités et la barre d'actions."""
 
 from __future__ import annotations
 
+import html
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QFont
+from PySide6.QtCore import Qt, QUrl, Signal
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
-    QButtonGroup,
+    QComboBox,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -19,11 +22,24 @@ from PySide6.QtWidgets import (
 )
 
 from tribin.service.queue import QueueItem
-from tribin.ui.components import Breadcrumb, ConfidenceGauge, KeyButton, Pill, elided, item_level, section, thumbnail
-from tribin.ui.theme import BORDER, mono_font
+from tribin.ui.components import (
+    Breadcrumb,
+    ConfidenceBar,
+    KeyButton,
+    Pill,
+    divider,
+    elided,
+    human_size,
+    item_level,
+    muted,
+    section,
+    thumbnail,
+)
+from tribin.ui.theme import mono_font
 
 HESITATION = "L'IA hésite avec"
 NEW_VERSION = "Nouvelle version"
+LEVEL_COLORS = {"sure": "#14B8A6", "look": "#F5A524", "check": "#F0605A", "wait": "#C9CDE6"}
 
 
 def category_label(code: str) -> str:
@@ -42,6 +58,12 @@ def level_text(item: QueueItem) -> str:
     return f"{item_level(item)[1]} · {p.confidence:.0%}".replace("%", " %")
 
 
+def field_label(text: str) -> QLabel:
+    label = QLabel(text)
+    label.setObjectName("FieldLabel")
+    return label
+
+
 class DetailPanel(QFrame):
     """Proposition du fichier sélectionné ; nom, dossier et catégorie se modifient directement."""
 
@@ -54,119 +76,135 @@ class DetailPanel(QFrame):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setObjectName("Card")
         self.item: QueueItem | None = None
         self._folder = ""
         self._categories: list[str] = []
         self._filling = False
 
+        # --- en-tête : le fichier ---
+        head = QFrame()
+        head.setObjectName("PaneHead")
+        top = QHBoxLayout(head)
+        top.setContentsMargins(28, 20, 20, 16)
+        top.setSpacing(16)
+        self.preview = QLabel()
+        self.preview.setFixedSize(56, 56)
+        self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.preview.setStyleSheet("background: #F6F7FB; border-radius: 8px;")
+        top.addWidget(self.preview, 0, Qt.AlignmentFlag.AlignTop)
+        titles = QVBoxLayout()
+        titles.setSpacing(2)
+        self.original = QLabel()
+        self.original.setObjectName("Title")
+        self.original.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.meta = muted(wrap=False)
+        titles.addWidget(self.original)
+        titles.addWidget(self.meta)
+        top.addLayout(titles, 1)
+        self.open_button = QPushButton("Ouvrir")
+        self.open_button.setObjectName("Ghost")
+        self.open_button.clicked.connect(self._open_file)
+        self.reveal_button = QPushButton("Afficher dans le dossier")
+        self.reveal_button.setObjectName("Ghost")
+        self.reveal_button.clicked.connect(self._reveal_file)
+        top.addWidget(self.open_button, 0, Qt.AlignmentFlag.AlignTop)
+        top.addWidget(self.reveal_button, 0, Qt.AlignmentFlag.AlignTop)
+
+        # --- la proposition de l'IA ---
         content = QWidget()
         body = QVBoxLayout(content)
-        body.setContentsMargins(24, 22, 24, 12)
-        body.setSpacing(18)
+        body.setContentsMargins(28, 20, 28, 20)
+        body.setSpacing(0)
 
-        top = QHBoxLayout()
-        top.setSpacing(24)
-        self.preview = QLabel()
-        self.preview.setFixedSize(150, 190)
-        self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.preview.setStyleSheet("background: #F5F6FA; border-radius: 10px;")
-        top.addWidget(self.preview, 0, Qt.AlignmentFlag.AlignTop)
-        names = QVBoxLayout()
-        names.setSpacing(8)
-        chips = QHBoxLayout()
-        chips.setSpacing(8)
-        self.pill = Pill()
+        card = QFrame()
+        card.setObjectName("SuggestCard")
+        inner = QVBoxLayout(card)
+        inner.setContentsMargins(18, 14, 18, 16)
+        inner.setSpacing(12)
+        card_head = QHBoxLayout()
+        star = QLabel("✦")
+        star.setStyleSheet("color: #F5A524; font-size: 14px;")
+        card_title = QLabel("Proposition de l'IA")
+        card_title.setStyleSheet("font-weight: 600; color: #5B6080;")
         self.note = Pill(colors=("#E8EAF6", "#2C3460"))
-        chips.addWidget(self.pill)
-        chips.addWidget(self.note)
-        chips.addStretch()
-        names.addLayout(chips)
-        names.addWidget(section("Avant"))
-        self.original = QLabel()
-        strike = mono_font()
-        strike.setStrikeOut(True)
-        self.original.setFont(strike)
-        self.original.setObjectName("Strike")
-        self.original.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        names.addWidget(self.original)
-        names.addWidget(section("Après"))
+        card_head.addWidget(star)
+        card_head.addWidget(card_title)
+        card_head.addStretch()
+        card_head.addWidget(self.note)
+        inner.addLayout(card_head)
+
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(16)
+        grid.setVerticalSpacing(12)
+        grid.setColumnMinimumWidth(0, 110)
+        grid.setColumnStretch(1, 1)
+        grid.addWidget(field_label("Nouveau nom"), 0, 0)
         name_row = QHBoxLayout()
+        name_row.setSpacing(8)
         self.name = QLineEdit()
         self.name.setObjectName("NewName")
         self.name.setFont(mono_font())
         self.name.setAccessibleName("Nouveau nom")
+        self.name.setToolTip("Raccourci : E")
         self.name.textChanged.connect(self._changed)
         self.name.returnPressed.connect(self.validate_clicked)
-        self.rename_button = KeyButton("Modifier", "E")
-        self.rename_button.clicked.connect(self.focus_name)
         name_row.addWidget(self.name, 1)
-        name_row.addWidget(self.rename_button)
-        names.addLayout(name_row)
-        names.addStretch()
-        top.addLayout(names, 1)
-        body.addLayout(top)
+        grid.addLayout(name_row, 0, 1)
 
-        destination = QVBoxLayout()
-        destination.setSpacing(10)
-        destination.addWidget(section("Destination"))
+        grid.addWidget(field_label("Dossier"), 1, 0)
         crumb_row = QHBoxLayout()
+        crumb_row.setSpacing(10)
         self.breadcrumb = Breadcrumb()
-        self.browse = QPushButton("Autre dossier…")
+        self.browse = QPushButton("Changer…")
         self.browse.setObjectName("Link")
         self.browse.clicked.connect(self.browse_clicked)
         crumb_row.addWidget(self.breadcrumb)
         crumb_row.addWidget(self.browse)
         crumb_row.addStretch()
-        destination.addLayout(crumb_row)
-        self.cat_row = QHBoxLayout()
-        self.cat_row.setSpacing(6)
-        self.cat_group = QButtonGroup(self)
-        self.cat_group.setExclusive(True)
-        self.cat_group.buttonClicked.connect(self._category_clicked)
-        destination.addLayout(self.cat_row)
-        body.addLayout(destination)
+        grid.addLayout(crumb_row, 1, 1)
 
-        confidence = QVBoxLayout()
-        confidence.setSpacing(6)
-        head = QHBoxLayout()
-        head.addWidget(section("Confiance de l'IA"))
-        head.addStretch()
-        self.conf_value = QLabel()
-        self.conf_value.setStyleSheet("font-weight: 700;")
-        head.addWidget(self.conf_value)
-        confidence.addLayout(head)
-        self.gauge = ConfidenceGauge()
-        confidence.addWidget(self.gauge)
-        legend = QHBoxLayout()
-        for text in ("À vérifier", "À regarder", "Sûr"):
-            label = QLabel(text)
-            label.setObjectName("Muted")
-            legend.addWidget(label)
-            if text != "Sûr":
-                legend.addStretch()
-        confidence.addLayout(legend)
-        body.addLayout(confidence)
+        grid.addWidget(field_label("Catégorie"), 2, 0)
+        self.category = QComboBox()
+        self.category.setMinimumWidth(200)
+        self.category.setAccessibleName("Catégorie")
+        self.category.activated.connect(self._category_chosen)
+        cat_row = QHBoxLayout()
+        cat_row.addWidget(self.category)
+        cat_row.addStretch()
+        grid.addLayout(cat_row, 2, 1)
 
-        body.addWidget(section("Pourquoi cette proposition"))
+        grid.addWidget(field_label("Confiance"), 3, 0)
+        conf_row = QHBoxLayout()
+        conf_row.setSpacing(10)
+        self.bar = ConfidenceBar()
+        self.pill = QLabel()
+        self.pill.setStyleSheet("font-weight: 500;")
+        conf_row.addWidget(self.bar, 0, Qt.AlignmentFlag.AlignVCenter)
+        conf_row.addWidget(self.pill)
+        conf_row.addStretch()
+        grid.addLayout(conf_row, 3, 1)
+        inner.addLayout(grid)
+
+        inner.addWidget(divider())
         self.reasoning = QLabel()
         self.reasoning.setWordWrap(True)
+        self.reasoning.setStyleSheet("color: #3A4063;")
         self.reasoning.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        body.addWidget(self.reasoning)
+        inner.addWidget(self.reasoning)
         self.warnings = QLabel()
         self.warnings.setObjectName("Warning")
         self.warnings.setWordWrap(True)
-        body.addWidget(self.warnings)
+        inner.addWidget(self.warnings)
+        body.addWidget(card)
 
-        self.alt_title = section("L'IA hésite avec")
-        self.alt_title.setStyleSheet("color: #8A4B05;")
+        # --- autres possibilités ---
+        body.addSpacing(24)
+        self.alt_title = section("Autres possibilités")
         body.addWidget(self.alt_title)
-        self.alt_box = QVBoxLayout()
-        self.alt_box.setSpacing(8)
-        self.alt_cards = [self._alt_card(index) for index in range(2)]  # créés une fois, réutilisés
-        for card, _, _ in self.alt_cards:
-            self.alt_box.addWidget(card)
-        body.addLayout(self.alt_box)
+        body.addSpacing(6)
+        self.alt_rows = [self._alt_row(index) for index in range(2)]  # créées une fois, réutilisées
+        for row, _, _ in self.alt_rows:
+            body.addWidget(row)
         body.addStretch()
 
         scroll = QScrollArea()
@@ -175,25 +213,27 @@ class DetailPanel(QFrame):
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
+        # --- actions ---
         actions = QFrame()
-        actions.setObjectName("ActionBar")
-        actions.setStyleSheet(f"QFrame#ActionBar {{ border: none; border-top: 1px solid {BORDER}; background: transparent; }}")
+        actions.setObjectName("PaneFoot")
         bar = QHBoxLayout(actions)
-        bar.setContentsMargins(24, 14, 24, 18)
-        self.validate_button = KeyButton("Valider et ranger", "Entrée", "Primary")
-        self.validate_button.clicked.connect(self.validate_clicked)
-        self.return_button = KeyButton("Renvoyer à l'origine", "R")
+        bar.setContentsMargins(20, 12, 28, 12)
+        bar.setSpacing(8)
+        self.return_button = KeyButton("Renvoyer à l'origine", "R", "Ghost")
         self.return_button.clicked.connect(self.return_clicked)
-        self.skip_button = KeyButton("Passer", "Échap", "Ghost")
+        self.skip_button = KeyButton("Passer", "Échap")
         self.skip_button.clicked.connect(self.skip_clicked)
-        bar.addWidget(self.validate_button)
+        self.validate_button = KeyButton("Ranger ici", "Entrée", "Primary")
+        self.validate_button.clicked.connect(self.validate_clicked)
         bar.addWidget(self.return_button)
         bar.addStretch()
         bar.addWidget(self.skip_button)
+        bar.addWidget(self.validate_button)
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
+        outer.addWidget(head)
         outer.addWidget(scroll, 1)
         outer.addWidget(actions)
 
@@ -208,9 +248,9 @@ class DetailPanel(QFrame):
         parts = [p for p in self._folder.split("/") if p]
         self.breadcrumb.set_parts(parts)
         current = parts[-1] if parts else ""
-        for button in self.cat_group.buttons():
-            button.setChecked(button.property("code") == current)
-            button.setEnabled(bool(parts) and current in self._categories and self.name.isEnabled())
+        index = self.category.findData(current)
+        self.category.setCurrentIndex(index)
+        self.category.setEnabled(index >= 0 and self.name.isEnabled())
         self._changed()
 
     def focus_name(self) -> None:
@@ -221,32 +261,29 @@ class DetailPanel(QFrame):
         if not self._filling:
             self.edited.emit()
 
-    def _category_clicked(self, button: QPushButton) -> None:
+    def _category_chosen(self, index: int) -> None:
+        code = self.category.itemData(index)
         parts = [p for p in self._folder.split("/") if p]
-        if parts and parts[-1] in self._categories:
-            parts[-1] = button.property("code")
+        if code and parts and parts[-1] in self._categories:
+            parts[-1] = code
             self.set_folder("/".join(parts))
 
     def _build_categories(self, categories: list[str]) -> None:
         if categories == self._categories:
             return
         self._categories = categories
-        for button in self.cat_group.buttons():
-            self.cat_group.removeButton(button)
-            button.hide()
-            button.deleteLater()
-        while self.cat_row.count():
-            self.cat_row.takeAt(0)
+        self.category.clear()
         for code in categories:
-            button = QPushButton(category_label(code))
-            button.setObjectName("Chip")
-            button.setCheckable(True)
-            button.setProperty("code", code)
-            button.setToolTip(code)
-            self.cat_group.addButton(button)
-            self.cat_row.addWidget(button)
-            button.show()
-        self.cat_row.addStretch()
+            self.category.addItem(category_label(code), code)
+            self.category.setItemData(self.category.count() - 1, code, Qt.ItemDataRole.ToolTipRole)
+
+    def _open_file(self) -> None:
+        if self.item:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(self.item.staged_path))
+
+    def _reveal_file(self) -> None:
+        if self.item:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(Path(self.item.staged_path).parent)))
 
     # --- affichage ----------------------------------------------------------------------------
 
@@ -262,23 +299,26 @@ class DetailPanel(QFrame):
             self._build_categories(categories or [])
             p = item.proposal
             ready = item.status == "ready" and p is not None
-            _, _, background, text = item_level(item)
-            self.pill.setText(level_text(item))
-            self.pill.set_colors((background, text))
+            key = item_level(item)[0]
             notes = [w for w in (p.warnings if p else []) if w.startswith(NEW_VERSION)]
             self.note.setVisible(bool(notes))
             self.note.setText(notes[0] if notes else "")
-            self.preview.setPixmap(thumbnail(Path(item.staged_path), 140, 180))
-            original = Path(item.original_path).name
-            self.original.setText(elided(original, self.original, 520, Qt.TextElideMode.ElideMiddle))
-            self.original.setToolTip(f"{original}\nVenait de : {Path(item.original_path).parent}")
+            staged, original = Path(item.staged_path), Path(item.original_path)
+            self.preview.setPixmap(thumbnail(staged, 52, 52))
+            self.original.setText(elided(original.name, self.original, 460, Qt.TextElideMode.ElideMiddle))
+            self.original.setToolTip(original.name)
+            meta = [original.suffix[1:].upper() or "Fichier"]
+            if staged.exists():
+                meta.append(human_size(staged.stat().st_size))
+            meta.append(f"déposé depuis {original.parent.name or original.parent}")
+            self.meta.setText(" · ".join(meta))
+            self.meta.setToolTip(str(original.parent))
             self.name.setText(name)
-            for widget in (self.name, self.rename_button, self.browse, self.validate_button):
+            for widget in (self.name, self.browse, self.validate_button):
                 widget.setEnabled(ready)
             self.set_folder(folder)
-            self.conf_value.setText(f"{p.confidence:.0%}".replace("%", " %") if p and not p.manual else "—")
-            self.conf_value.setStyleSheet(f"font-weight: 700; color: {text};")
-            self.gauge.set_value(p.confidence if p and not p.manual else None)
+            self.pill.setText(level_text(item))
+            self.bar.set_value(p.confidence if p and not p.manual else None, LEVEL_COLORS[key])
             if item.status == "analyzing":
                 self.reasoning.setText("L'IA analyse ce fichier…")
             elif item.status == "error":
@@ -294,37 +334,38 @@ class DetailPanel(QFrame):
         finally:
             self._filling = False
 
-    def _alt_card(self, index: int) -> tuple[QFrame, QLabel, QLabel]:
-        card = QFrame()
-        card.setObjectName("AltCard")
-        row = QHBoxLayout(card)
-        row.setContentsMargins(14, 10, 10, 10)
+    def _alt_row(self, index: int) -> tuple[QFrame, QLabel, QLabel]:
+        row = QFrame()
+        row.setObjectName("AltRow")
+        row.setStyleSheet("QFrame#AltRow { border: none; border-top: 1px solid #EEF0F6; }")
+        line = QHBoxLayout(row)
+        line.setContentsMargins(0, 10, 0, 10)
+        line.setSpacing(12)
         texts = QVBoxLayout()
         texts.setSpacing(2)
         where = QLabel()
-        bold = QFont(where.font())
-        bold.setBold(True)
-        where.setFont(bold)
+        where.setTextFormat(Qt.TextFormat.RichText)
         where.setWordWrap(True)
-        why = QLabel()
-        why.setStyleSheet("color: #6B5A3A;")
-        why.setWordWrap(True)
+        why = muted(name="Faint")
         texts.addWidget(where)
         texts.addWidget(why)
-        row.addLayout(texts, 1)
-        use = QPushButton("Utiliser cette piste")
-        use.setObjectName("AltButton")
+        line.addLayout(texts, 1)
+        use = QPushButton("Utiliser")
+        use.setObjectName("Small")
+        use.setAccessibleName(f"Utiliser la possibilité {index + 1}")
         use.clicked.connect(lambda _=False, i=index: self.alternative_chosen.emit(i))
-        row.addWidget(use, 0, Qt.AlignmentFlag.AlignVCenter)
-        card.hide()
-        return card, where, why
+        line.addWidget(use, 0, Qt.AlignmentFlag.AlignVCenter)
+        row.hide()
+        return row, where, why
 
     def _fill_alternatives(self, item: QueueItem) -> None:
         alternatives = item.proposal.alternatives if item.proposal else []
         self.alt_title.setVisible(bool(alternatives))
-        for index, (card, where, why) in enumerate(self.alt_cards):
+        for index, (row, where, why) in enumerate(self.alt_rows):
             if index < len(alternatives):
                 alt = alternatives[index]
-                where.setText(" › ".join(p for p in alt.target_folder.split("/") if p))
+                parts = [html.escape(p) for p in alt.target_folder.split("/") if p]
+                head = " › ".join(parts[:-1])
+                where.setText(f"{head} › <b>{parts[-1]}</b>" if len(parts) > 1 else f"<b>{''.join(parts)}</b>")
                 why.setText(alt.reasoning or "Autre destination plausible.")
-            card.setVisible(index < len(alternatives))
+            row.setVisible(index < len(alternatives))

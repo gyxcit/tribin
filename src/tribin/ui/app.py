@@ -121,7 +121,7 @@ class AppController:
                 if attempt < MAX_WRITE_RETRIES:
                     QTimer.singleShot(RETRY_MS, lambda: self._drop_one(path, attempt + 1))
                 else:
-                    self.error(f"« {path.name} » est encore en cours d'écriture : réessaie plus tard.")
+                    self.error(f"« {path.name} » est encore en cours d'écriture : réessayez plus tard.")
                 return
             self.refresh_queue()
             self._analyze(result.file_id)
@@ -285,7 +285,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         controller.service.convention()
     except BinError as exc:
-        QMessageBox.warning(None, "TriBin", f"{exc}\nOuvre les réglages pour corriger.")
+        QMessageBox.warning(None, "TriBin", f"{exc}\nOuvrez les réglages pour corriger.")
     controller.start(paths + app.pending_opens)
     return app.exec()
 

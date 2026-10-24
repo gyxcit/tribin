@@ -36,9 +36,9 @@ VISIBLE_ROWS = 4
 MAX_BATCHES = 80
 
 # libellé, couleur du libellé
-KINDS = {"moved": ("RANGÉ", "#0F766E"), "edited": ("MODIFIÉ", "#2C3460"), "archived": ("MIS DE CÔTÉ", "#8A4B05"),
-         "staged": ("DÉPOSÉ", "#5B6080"), "mkdir": ("DOSSIER CRÉÉ", "#5B6080"), "undone": ("ANNULÉ", "#5B6080"),
-         "failed": ("ÉCHEC", "#A42A25"), "other": ("OPÉRATION", "#5B6080")}
+KINDS = {"moved": ("Rangé", "#0F766E"), "edited": ("Modifié", "#2C3460"), "archived": ("Mis de côté", "#8A4B05"),
+         "staged": ("Déposé", "#5B6080"), "mkdir": ("Dossier créé", "#5B6080"), "undone": ("Annulé", "#5B6080"),
+         "failed": ("Échec", "#A42A25"), "other": ("Opération", "#5B6080")}
 
 
 def day_label(day: str) -> str:
@@ -213,7 +213,7 @@ class HistoryView(QWidget):
         if moves:
             title = f"{time} · {plural(len(moves), 'fichier')} rangé{'s' if len(moves) > 1 else ''}"
         elif stages:
-            title = f"{time} · {plural(len(stages), 'fichier')} déposé{'s' if len(stages) > 1 else ''} dans la corbeille"
+            title = f"{time} · {plural(len(stages), 'fichier')} déposé{'s' if len(stages) > 1 else ''} dans TriBin"
         else:
             title = f"{time} · {plural(len(members), 'opération')}"
         if undone:
@@ -225,7 +225,7 @@ class HistoryView(QWidget):
                            f"{'s' if decisions.count('accepted') > 1 else ''} telle{'s' if decisions.count('accepted') > 1 else ''} quelle{'s' if decisions.count('accepted') > 1 else ''}")
         changed = decisions.count("edited") + decisions.count("alternative_chosen")
         if changed:
-            details.append(f"{changed} modifiée{'s' if changed > 1 else ''} par toi")
+            details.append(f"{changed} modifiée{'s' if changed > 1 else ''} par vous")
         if failed:
             details.append(f"{plural(failed, 'échec')}")
 
@@ -256,7 +256,7 @@ class HistoryView(QWidget):
         row.addLayout(texts, 1)
         undoable = [o for o in members if o.get("status") == "done" and o.get("action") in REVERSIBLE]
         if undone:
-            tag = QLabel("ANNULÉ")
+            tag = QLabel("Annulé")
             tag.setStyleSheet("background: #ECEEF4; color: #5B6080; border-radius: 11px; padding: 3px 10px; font-weight: 700;")
             row.addWidget(tag)
         elif undoable:

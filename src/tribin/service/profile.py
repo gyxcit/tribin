@@ -13,8 +13,8 @@ log = logging.getLogger(__name__)
 
 QUESTIONS: list[tuple[str, str, list[str], bool]] = [
     # (clé, question, choix, choix multiple)
-    ("secteur", "Ton secteur", ["Agence de pub / com", "Studio créatif", "Freelance", "Autre"], False),
-    ("role", "Ton rôle", ["Créa", "Chef de projet", "Production", "Commercial / admin", "Direction", "Autre"], False),
+    ("secteur", "Votre secteur", ["Agence de pub / com", "Studio créatif", "Freelance", "Autre"], False),
+    ("role", "Votre rôle", ["Créa", "Chef de projet", "Production", "Commercial / admin", "Direction", "Autre"], False),
     ("usage", "Usage", ["Personnel", "En équipe"], False),
     ("types", "Types de fichiers principaux", ["Visuels", "Documents", "Vidéo", "Admin / factures", "Mise en page", "Autre"], True),
     ("situation", "Situation", ["Une structure existe à respecter", "Structure à créer de zéro",
@@ -24,7 +24,7 @@ QUESTIONS: list[tuple[str, str, list[str], bool]] = [
 PRIVACY_NOTICE = (
     "Confidentialité : pour proposer un rangement, TriBin envoie au service d'IA choisi (Anthropic, Google ou Mistral) un extrait "
     "du fichier — texte tronqué à 4 000 caractères et image réduite à 1 024 pixels —, jamais le fichier complet. "
-    "Aucune télémétrie. Tes réponses d'onboarding restent sur cet ordinateur."
+    "Aucune télémétrie. Vos réponses du premier lancement restent sur cet ordinateur."
 )
 
 PROFILE_SYSTEM = ("Tu rédiges, en français, le profil court (5 à 8 lignes) d'un utilisateur d'un outil de rangement de "

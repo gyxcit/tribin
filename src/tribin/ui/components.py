@@ -1,4 +1,4 @@
-"""Composants visuels réutilisables : pastille de confiance, jauge, fil d'Ariane, bouton avec raccourci, aperçus."""
+"""Composants visuels réutilisables : titres, pastilles, barre de confiance, fil d'Ariane, boutons, aperçus."""
 
 from __future__ import annotations
 
@@ -7,23 +7,55 @@ from pathlib import Path
 
 from PySide6.QtCore import QFileInfo, QRectF, QSize, Qt
 from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPixmap
-from PySide6.QtWidgets import QFileIconProvider, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QWidget
+from PySide6.QtWidgets import (
+    QFileIconProvider,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QRadioButton,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
 
 from tribin.service.queue import QueueItem
-from tribin.ui.theme import NAVY, level_for, pill_style
+from tribin.ui.theme import level_for, pill_style
 
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".tif", ".tiff"}
 PREVIEW_EXT = {".pdf", ".ai", ".psd"}
+
+# Couleur du badge de type de fichier (liste et en-tête du détail)
+BADGE_COLORS = {".pdf": "#C2410C", ".psd": "#2C3460", ".ai": "#B45309", ".indd": "#BE185D",
+                ".jpg": "#6B7194", ".jpeg": "#6B7194", ".png": "#7C3AED", ".gif": "#7C3AED", ".svg": "#7C3AED",
+                ".doc": "#3B47B8", ".docx": "#3B47B8", ".xls": "#0F766E", ".xlsx": "#0F766E", ".csv": "#0F766E",
+                ".ppt": "#C2410C", ".pptx": "#C2410C", ".zip": "#5B6080", ".mp4": "#9D174D", ".mov": "#9D174D"}
+
+# Statut affiché dans la file : clé de niveau -> libellé court
+STATUS_LABELS = {"sure": "Prêt", "look": "À regarder", "check": "À vérifier", "wait": "Analyse"}
 
 
 # --- textes -----------------------------------------------------------------------------------
 
 
 def section(text: str, name: str = "Section") -> QLabel:
-    """Petit titre de section en capitales (« DESTINATION », « POURQUOI… »)."""
-    label = QLabel(text.upper())
+    """Titre de section, en minuscules comme une phrase (« Dossiers à ranger »)."""
+    label = QLabel(text)
     label.setObjectName(name)
     return label
+
+
+def muted(text: str = "", name: str = "Muted", wrap: bool = True) -> QLabel:
+    label = QLabel(text)
+    label.setObjectName(name)
+    label.setWordWrap(wrap)
+    return label
+
+
+def divider() -> QFrame:
+    line = QFrame()
+    line.setObjectName("Divider")
+    return line
 
 
 def elided(text: str, widget: QWidget, width: int, mode: Qt.TextElideMode = Qt.TextElideMode.ElideRight) -> str:
@@ -37,13 +69,17 @@ def item_level(item: QueueItem) -> tuple[str, str, str, str]:
                      waiting=item.status == "analyzing")
 
 
-def short_confidence(item: QueueItem) -> str:
-    """Pastille courte de la liste : « 92 % », « Analyse… », « À traiter »."""
-    if item.status == "analyzing":
-        return "Analyse…"
-    if item.status == "error" or not item.proposal or item.proposal.manual:
-        return "À traiter"
-    return f"{item.proposal.confidence:.0%}".replace("%", " %")
+def status_label(item: QueueItem) -> str:
+    """Pastille de la file : « Prêt », « À regarder », « À vérifier », « Analyse »."""
+    return STATUS_LABELS[item_level(item)[0]]
+
+
+def human_size(size: int) -> str:
+    for unit in ("octets", "Ko", "Mo", "Go"):
+        if size < 1024 or unit == "Go":
+            return f"{size:.0f} {unit}" if unit == "octets" else f"{size:.1f} {unit}".replace(".", ",")
+        size /= 1024
+    return ""
 
 
 class Pill(QLabel):
@@ -58,18 +94,72 @@ class Pill(QLabel):
         self.setStyleSheet(pill_style(colors))
 
 
+class FileBadge(QLabel):
+    """Carré coloré avec l'extension du fichier (« PDF », « PSD »…)."""
+
+    def __init__(self, size: int = 36):
+        super().__init__()
+        self.setObjectName("FileBadge")
+        self.setFixedSize(size, size)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+    def set_path(self, path: Path) -> None:
+        suffix = path.suffix.lower()
+        self.setText((suffix[1:4] or "?").upper())
+        self.setStyleSheet(f"background: {BADGE_COLORS.get(suffix, '#5B6080')};")
+
+
+class ChoiceCard(QFrame):
+    """Carte cliquable avec bouton radio, titre, étiquette facultative et une ligne d'explication."""
+
+    def __init__(self, title: str, description: str, tag: str = ""):
+        super().__init__()
+        self.setObjectName("ChoiceCard")
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        row = QHBoxLayout(self)
+        row.setContentsMargins(14, 12, 14, 12)
+        row.setSpacing(10)
+        self.radio = QRadioButton()
+        self.radio.toggled.connect(self._toggled)
+        row.addWidget(self.radio, 0, Qt.AlignmentFlag.AlignTop)
+        texts = QVBoxLayout()
+        texts.setSpacing(2)
+        head = QHBoxLayout()
+        head.setSpacing(8)
+        name = QLabel(title)
+        name.setStyleSheet("font-weight: 600;")
+        head.addWidget(name)
+        if tag:
+            badge = QLabel(tag)
+            badge.setStyleSheet("background: #DDF5F1; color: #0F766E; border-radius: 9px; padding: 1px 8px;"
+                                " font-size: 11px; font-weight: 600;")
+            head.addWidget(badge)
+        head.addStretch()
+        texts.addLayout(head)
+        texts.addWidget(muted(description))
+        row.addLayout(texts, 1)
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802 — API Qt
+        self.radio.setChecked(True)
+
+    def _toggled(self, checked: bool) -> None:
+        self.setProperty("checked", "true" if checked else "false")
+        self.style().unpolish(self)
+        self.style().polish(self)
+
+
 # --- bouton avec raccourci ----------------------------------------------------------------------
 
 
 class KeyButton(QPushButton):
-    """Bouton « Valider et ranger  [Entrée] » : libellé et touche de raccourci affichée."""
+    """Bouton « Ranger ici  [Entrée] » : libellé et touche de raccourci affichée."""
 
     def __init__(self, text: str, key: str = "", kind: str = ""):
         super().__init__()
         if kind:
             self.setObjectName(kind)
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(16, 0, 14, 0)
+        layout.setContentsMargins(14, 0, 10, 0)
         layout.setSpacing(8)
         self.label = QLabel(text)
         self.label.setObjectName("BtnText")
@@ -82,47 +172,40 @@ class KeyButton(QPushButton):
             hint.setFixedHeight(18)
             hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
             layout.addWidget(hint, 0, Qt.AlignmentFlag.AlignVCenter)
-        self.setMinimumHeight(42)
+        self.setMinimumHeight(38)
         self.setAccessibleName(text)
 
     def sizeHint(self) -> QSize:  # noqa: N802 — API Qt
         hint = self.layout().sizeHint()
-        return QSize(hint.width() + 8, max(42, hint.height()))
+        return QSize(hint.width() + 6, max(38, hint.height()))
 
 
-# --- jauge de confiance ---------------------------------------------------------------------------
+# --- barre de confiance ---------------------------------------------------------------------------
 
 
-class ConfidenceGauge(QWidget):
-    """Barre en trois zones (à vérifier < 60 % < à regarder < 80 % < sûr) et un repère."""
+class ConfidenceBar(QWidget):
+    """Barre fine remplie selon la confiance, dans la couleur de son niveau."""
 
-    ZONES = ((0.6, "#F9C9C6"), (0.2, "#FBE1B0"), (0.2, "#B7EAE2"))
-
-    def __init__(self) -> None:
+    def __init__(self, width: int = 160) -> None:
         super().__init__()
         self.value: float | None = None
-        self.setFixedHeight(20)
+        self.color = QColor("#14B8A6")
+        self.setFixedSize(width, 6)
         self.setAccessibleName("Confiance de l'IA")
 
-    def set_value(self, value: float | None) -> None:
-        self.value = value
+    def set_value(self, value: float | None, color: str = "#14B8A6") -> None:
+        self.value, self.color = value, QColor(color)
         self.update()
 
     def paintEvent(self, event) -> None:  # noqa: N802 — API Qt
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        width, top, height, gap = self.width(), 5, 10, 3
-        x = 0.0
-        for share, color in self.ZONES:
-            w = width * share - gap
-            p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(QColor(color))
-            p.drawRoundedRect(QRectF(x, top, max(0.0, w), height), 4, 4)
-            x += width * share
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor("#ECEEF4"))
+        p.drawRoundedRect(QRectF(0, 0, self.width(), self.height()), 3, 3)
         if self.value is not None:
-            marker = max(2.0, min(width - 2.0, width * self.value))
-            p.setBrush(QColor(NAVY))
-            p.drawRoundedRect(QRectF(marker - 2, 0, 4, 20), 2, 2)
+            p.setBrush(self.color)
+            p.drawRoundedRect(QRectF(0, 0, max(6.0, self.width() * self.value), self.height()), 3, 3)
         p.end()
 
 
@@ -130,7 +213,7 @@ class ConfidenceGauge(QWidget):
 
 
 class Breadcrumb(QWidget):
-    """Destination en étapes : Client › Année › Projet › Catégorie (la dernière en bleu nuit)."""
+    """Destination en texte : Client › Année › Projet › Catégorie (la dernière en gras)."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -145,7 +228,7 @@ class Breadcrumb(QWidget):
                 widget.hide()  # sinon visible jusqu'à sa destruction effective
                 widget.deleteLater()
         if not parts:
-            empty = QLabel("Aucun dossier : choisis-en un avec « Autre dossier… »")
+            empty = QLabel("Aucun dossier choisi")
             empty.setObjectName("Muted")
             self.row.addWidget(empty)
             empty.show()

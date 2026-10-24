@@ -1,15 +1,18 @@
-"""Thème de l'application, construit à partir des couleurs du logo (maquette Claude Design « TriBin — nouvelle interface »).
+"""Thème de l'application (maquette Claude Design « TriBin — interface v2 », couleurs du logo).
 
-Bleu nuit : structure (bandeau, boutons principaux). Turquoise / ambre / corail : niveaux de confiance
+Bleu nuit : boutons principaux et sélection. Turquoise / ambre / corail : niveaux de confiance
 (sûr / à regarder / à vérifier), dans le même ordre que les trois barres du logo.
 """
 
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 from PySide6.QtGui import QColor, QFont, QPalette
 from PySide6.QtWidgets import QApplication
+
+from tribin import resources
 
 NAVY = "#1F2544"
 NAVY_2 = "#2C3460"
@@ -17,7 +20,7 @@ INDIGO = "#3B4CCA"
 INK = "#1F2544"
 MUTED = "#5B6080"
 FAINT = "#8A8FAE"
-BACKGROUND = "#F5F6FA"
+BACKGROUND = "#F6F7FB"
 SURFACE = "#FFFFFF"
 BORDER = "#E2E5EF"
 BORDER_STRONG = "#C9CDE6"
@@ -32,84 +35,112 @@ LEVEL_LOOK = ("look", "À regarder", "#FDF0D5", "#8A4B05")
 LEVEL_CHECK = ("check", "À vérifier", "#FDE4E2", "#A42A25")
 LEVEL_WAIT = ("wait", "Analyse…", "#ECEEF4", "#5B6080")
 
+CHEVRON = Path(resources.__file__).with_name("chevron-down.svg").as_posix()
+CHECK = Path(resources.__file__).with_name("check.svg").as_posix()
+
 MONO_FAMILIES = ["Cascadia Mono", "Consolas", "SF Mono", "Menlo", "JetBrains Mono", "monospace"]
 
 STYLESHEET = f"""
-QMainWindow, QDialog, QWizard, QWizardPage {{ background: {BACKGROUND}; }}
+QMainWindow, QDialog, QWizard, QWizardPage {{ background: {SURFACE}; }}
 QToolTip {{ background: {NAVY}; color: white; border: none; padding: 6px 8px; border-radius: 4px; }}
 
-QFrame#Header {{ background: {NAVY}; }}
-QFrame#Header QLabel {{ color: white; background: transparent; }}
-QLabel#Brand {{ font-size: 18px; font-weight: 700; }}
-QLabel#HeaderTitle {{ font-size: 18px; font-weight: 600; }}
-QLabel#HeaderSubtitle {{ color: #B9BEDA; }}
-QPushButton#NavTab {{ background: transparent; color: #C9CDE6; border: none; border-radius: 8px; padding: 8px 14px; }}
-QPushButton#NavTab:hover {{ color: white; }}
-QPushButton#NavTab:checked {{ background: {NAVY_2}; color: white; font-weight: 600; }}
-QFrame#Header QLabel#HeaderChip {{ background: {NAVY_2}; color: #E3E6F5; border-radius: 13px; padding: 5px 12px; }}
-QFrame#Header QLabel#PendingChip {{ background: {AMBER}; color: {NAVY}; border-radius: 13px; padding: 5px 12px; font-weight: 700; }}
-QFrame#Header QPushButton {{ background: transparent; color: white; border: 1px solid #4A5280; }}
-QFrame#Header QPushButton:hover {{ background: {NAVY_2}; }}
-QFrame#Header QPushButton#NavTab {{ border: none; }}
+QFrame#Sidebar {{ background: {BACKGROUND}; border: none; border-right: 1px solid {BORDER}; }}
+QFrame#Sidebar QLabel {{ background: transparent; }}
+QLabel#Brand {{ font-size: 15px; font-weight: 600; }}
+QPushButton#NavItem {{ background: transparent; border: none; border-radius: 6px; padding: 7px 10px; text-align: left;
+    color: #3A4063; font-weight: 500; }}
+QPushButton#NavItem:hover {{ background: #ECEEF6; }}
+QPushButton#NavItem:checked {{ background: {SELECTION}; color: {INK}; font-weight: 600; }}
+QLabel#NavCount {{ color: {MUTED}; font-size: 12px; font-weight: 500; }}
+QLabel#AiStatus {{ color: {MUTED}; font-size: 12px; padding: 6px 10px; }}
+QFrame#Divider {{ background: {BORDER}; border: none; max-height: 1px; min-height: 1px; }}
 
-QFrame#Card {{ background: {SURFACE}; border: 1px solid {BORDER}; border-radius: 14px; }}
+QLabel#StepNum {{ border: 2px solid #D5D9E6; border-radius: 12px; background: white; color: {MUTED};
+    font-size: 11px; font-weight: 600; }}
+QLabel#StepNum[state="current"] {{ border-color: {NAVY}; color: {NAVY}; }}
+QLabel#StepNum[state="done"] {{ border-color: {TEAL}; background: {TEAL}; color: white; }}
+QLabel#StepText {{ color: {MUTED}; font-weight: 500; }}
+QLabel#StepText[state="current"] {{ color: {INK}; font-weight: 600; }}
+QLabel#RailNote {{ color: {FAINT}; font-size: 12px; }}
+
+QFrame#Card {{ background: {SURFACE}; border: 1px solid {BORDER}; border-radius: 10px; }}
+QFrame#SuggestCard {{ background: {SURFACE}; border: 1px solid {BORDER}; border-radius: 10px; }}
+QFrame#SuggestCard QLabel {{ background: transparent; }}
 QLabel#Muted {{ color: {MUTED}; }}
-QLabel#Section {{ color: {MUTED}; font-size: 11px; font-weight: 700; }}
-QLabel#Title {{ font-size: 22px; font-weight: 700; }}
+QLabel#Faint {{ color: {FAINT}; font-size: 12px; }}
+QLabel#Section {{ color: {INK}; font-size: 13px; font-weight: 600; }}
+QLabel#FieldLabel {{ color: {MUTED}; }}
+QLabel#Title {{ font-size: 20px; font-weight: 600; }}
 QLabel#Big {{ font-size: 16px; font-weight: 600; }}
 QLabel#Warning {{ background: #FDF0D5; color: #7A4606; border-radius: 8px; padding: 8px 10px; }}
 QLabel#Empty {{ color: {MUTED}; font-size: 14px; }}
-QLabel#Strike {{ color: {MUTED}; }}
+QLabel#Strike {{ color: {FAINT}; }}
+QLabel#FileBadge {{ border-radius: 6px; color: white; font-size: 10px; font-weight: 700; }}
 
-QPushButton {{ background: {SURFACE}; border: 1px solid {BORDER_STRONG}; border-radius: 10px; padding: 8px 14px; font-weight: 600; }}
+QPushButton {{ background: {SURFACE}; border: 1px solid #D5D9E6; border-radius: 8px; padding: 7px 14px; font-weight: 600; }}
 QPushButton:hover {{ border-color: {NAVY}; }}
 QPushButton:disabled {{ color: #A8ACC2; border-color: {BORDER}; }}
-QPushButton#Primary {{ background: {NAVY}; color: white; border: none; font-weight: 700; }}
+QPushButton#Primary {{ background: {NAVY}; color: white; border: 1px solid {NAVY}; }}
 QPushButton#Primary:hover {{ background: {NAVY_2}; }}
-QPushButton#Primary:disabled {{ background: #A8ACC2; color: white; }}
-QPushButton#Ghost {{ background: transparent; border: none; color: {MUTED}; }}
-QPushButton#Ghost:hover {{ color: {INK}; }}
-QPushButton#Link {{ background: transparent; border: none; color: {INDIGO}; padding: 4px 6px; }}
+QPushButton#Primary:disabled {{ background: #A8ACC2; border-color: #A8ACC2; color: white; }}
+QPushButton#Ghost {{ background: transparent; border: 1px solid transparent; color: #3A4063; font-weight: 500; }}
+QPushButton#Ghost:hover {{ background: #F0F2FA; }}
+QPushButton#Link {{ background: transparent; border: none; color: {INDIGO}; padding: 4px 2px; font-weight: 600; }}
 QPushButton#Link:hover {{ color: {NAVY}; }}
-QPushButton#Chip {{ border-radius: 14px; padding: 6px 12px; background: {SURFACE}; border: 1px solid {BORDER_STRONG}; font-weight: 500; }}
+QPushButton#Link:disabled {{ color: #A8ACC2; }}
+QPushButton#Small {{ padding: 4px 10px; }}
+QPushButton#Chip {{ border-radius: 14px; padding: 6px 12px; background: {SURFACE}; border: 1px solid #D5D9E6; font-weight: 500; }}
 QPushButton#Chip:checked {{ background: {NAVY}; color: white; border-color: {NAVY}; font-weight: 600; }}
 QPushButton#Chip:disabled {{ color: #A8ACC2; }}
-QLabel#Kbd {{ color: {MUTED}; border: 1px solid {BORDER}; border-radius: 4px; padding: 0 5px; font-size: 11px; background: transparent; }}
-QLabel#KbdDark {{ color: #C9CDE6; border: 1px solid #4A5280; border-radius: 4px; padding: 0 5px; font-size: 11px; background: transparent; }}
-QLabel#BtnText {{ background: transparent; font-weight: 700; }}
+QPushButton#Tab {{ background: transparent; border: none; border-bottom: 2px solid transparent; border-radius: 0;
+    padding: 8px 10px; color: {MUTED}; font-weight: 500; }}
+QPushButton#Tab:checked {{ color: {INK}; border-bottom-color: {NAVY}; font-weight: 600; }}
+QFrame#ChoiceCard {{ background: {SURFACE}; border: 1px solid {BORDER}; border-radius: 10px; }}
+QFrame#ChoiceCard[checked="true"] {{ border: 2px solid {NAVY}; background: #F6F7FC; }}
+QFrame#ChoiceCard QLabel, QFrame#ChoiceCard QRadioButton {{ background: transparent; }}
+QRadioButton::indicator {{ width: 16px; height: 16px; border-radius: 9px; border: 2px solid #B8BDD0; background: white; }}
+QRadioButton::indicator:checked {{ border: 5px solid {NAVY}; width: 10px; height: 10px; }}
+QCheckBox::indicator {{ width: 16px; height: 16px; border-radius: 4px; border: 2px solid #B8BDD0; background: white; }}
+QCheckBox::indicator:checked {{ border-color: {NAVY}; background: {NAVY}; image: url({CHECK}); }}
+QLabel#Kbd {{ color: {MUTED}; background: #ECEEF4; border-radius: 4px; padding: 0 5px; font-size: 11px; font-weight: 600; }}
+QLabel#KbdDark {{ color: white; background: #3A4170; border-radius: 4px; padding: 0 5px; font-size: 11px; font-weight: 600; }}
+QLabel#BtnText {{ background: transparent; font-weight: 600; }}
 QPushButton#Primary QLabel#BtnText {{ color: white; }}
+QPushButton#Ghost QLabel#BtnText {{ font-weight: 500; color: #3A4063; }}
 
-QLabel#Crumb {{ background: {BACKGROUND}; border: 1px solid {BORDER}; border-radius: 8px; padding: 5px 10px; }}
-QLabel#CrumbActive {{ background: {NAVY}; color: white; border-radius: 8px; padding: 5px 10px; font-weight: 600; }}
-QLabel#CrumbSep {{ color: {FAINT}; }}
-
-QFrame#AltCard {{ background: #FDF6E7; border: 1px solid #F6DCA6; border-radius: 10px; }}
-QFrame#AltCard QLabel {{ background: transparent; }}
-QPushButton#AltButton {{ background: white; border: 1px solid #E0B866; color: #6B4200; }}
+QLabel#Crumb {{ color: #3A4063; }}
+QLabel#CrumbActive {{ color: {INK}; font-weight: 600; }}
+QLabel#CrumbSep {{ color: #A0A5BC; }}
 
 QLineEdit, QPlainTextEdit, QComboBox, QDateEdit {{
-    background: {SURFACE}; border: 1px solid {BORDER_STRONG}; border-radius: 8px; padding: 7px 10px;
+    background: {SURFACE}; border: 1px solid #D5D9E6; border-radius: 8px; padding: 7px 10px;
 }}
-QLineEdit, QPlainTextEdit {{ selection-background-color: {NAVY}; }}
+QLineEdit, QPlainTextEdit {{ selection-background-color: {NAVY}; selection-color: white; }}
 QComboBox, QDateEdit {{ selection-background-color: {SELECTION}; selection-color: {INK}; }}
 QLineEdit:focus, QPlainTextEdit:focus, QComboBox:focus {{ border-color: {NAVY}; }}
-QLineEdit, QPlainTextEdit {{ selection-color: white; }}
-QComboBox QAbstractItemView {{ background: {SURFACE}; border: 1px solid {BORDER_STRONG}; outline: none; padding: 4px;
+QLineEdit:disabled, QComboBox:disabled {{ color: #A8ACC2; background: #FAFBFD; }}
+QComboBox::drop-down {{ border: none; width: 26px; subcontrol-origin: padding; subcontrol-position: center right; }}
+QComboBox::down-arrow {{ image: url({CHEVRON}); width: 12px; height: 12px; }}
+QComboBox QAbstractItemView {{ background: {SURFACE}; border: 1px solid #D5D9E6; outline: none; padding: 4px;
     selection-background-color: {SELECTION}; selection-color: {INK}; }}
 QAbstractItemView::item:selected, QAbstractItemView::item:hover {{ background: {SELECTION}; color: {INK}; }}
 QComboBox QAbstractItemView::item {{ min-height: 26px; padding: 2px 8px; }}
-QLineEdit#Search {{ border-color: {BORDER}; border-radius: 10px; padding: 9px 12px; }}
-QLineEdit#NewName {{ background: #FAFBFE; font-size: 14px; padding: 9px 12px; }}
 
-QLabel#GroupReview {{ color: #A42A25; font-size: 11px; font-weight: 700; }}
-QLabel#GroupReady {{ color: #0F766E; font-size: 11px; font-weight: 700; }}
-QLabel#GroupWait {{ color: {MUTED}; font-size: 11px; font-weight: 700; }}
-QListWidget#Queue {{ background: {BACKGROUND}; border: none; outline: none; }}
-QListWidget#Queue::item {{ border: none; margin: 2px 0; background: transparent; }}
+QLabel#GroupTitle {{ color: {MUTED}; font-size: 12px; font-weight: 600; }}
+QListWidget#Queue {{ background: {SURFACE}; border: none; outline: none; }}
+QListWidget#Queue::item {{ border: none; margin: 0; background: transparent; }}
 QListWidget#Queue::item:selected {{ background: transparent; }}
-QFrame#QueueRow {{ background: {SURFACE}; border: 1px solid {BORDER}; border-radius: 10px; }}
-QFrame#QueueRow[selected="true"] {{ border: 2px solid {NAVY}; background: {SELECTION}; }}
+QFrame#QueueRow {{ background: transparent; border: none; border-left: 3px solid transparent; }}
+QFrame#QueueRow:hover {{ background: #F7F8FC; }}
+QFrame#QueueRow[selected="true"] {{ background: #F0F2FA; border-left-color: {NAVY}; }}
 QFrame#QueueRow QLabel {{ background: transparent; }}
+QFrame#PaneFoot {{ background: {SURFACE}; border: none; border-top: 1px solid {BORDER}; }}
+QFrame#PaneHead {{ background: {SURFACE}; border: none; border-bottom: 1px solid {BORDER}; }}
+QFrame#Pane {{ background: {SURFACE}; border: none; border-right: 1px solid {BORDER}; }}
+
+QFrame#FolderRow {{ background: {SURFACE}; border: 1px solid {BORDER}; border-radius: 8px; }}
+QFrame#FolderRow QLabel {{ background: transparent; }}
+QLabel#EmptyBox {{ border: 1px dashed #D5D9E6; border-radius: 8px; padding: 10px 12px; color: {FAINT}; }}
 
 QFrame#OpRow {{ border-radius: 10px; border: 1px solid #D4EFEA; background: #F7FAF9; }}
 QFrame#OpRow[kind="archive"] {{ border-color: #F6DCA6; background: #FDF9EF; }}
@@ -149,7 +180,7 @@ def pill_colors(confidence: float | None, manual: bool = False, waiting: bool = 
 
 def pill_style(colors: tuple[str, str]) -> str:
     background, text = colors
-    return f"background: {background}; color: {text}; border-radius: 11px; padding: 3px 10px; font-weight: 700;"
+    return f"background: {background}; color: {text}; border-radius: 10px; padding: 2px 8px; font-weight: 600;"
 
 
 def mono_font(point_size: float | None = None) -> QFont:
@@ -160,33 +191,6 @@ def mono_font(point_size: float | None = None) -> QFont:
     if point_size:
         font.setPointSizeF(point_size)
     return font
-
-
-def header_bar(title: str, subtitle: str = ""):
-    """Bandeau bleu nuit avec le logo (boîtes de dialogue)."""
-    from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout
-
-    from tribin.ui.icons import logo_pixmap
-
-    header = QFrame()
-    header.setObjectName("Header")
-    layout = QHBoxLayout(header)
-    layout.setContentsMargins(18, 12, 18, 12)
-    logo = QLabel()
-    logo.setPixmap(logo_pixmap(34))
-    layout.addWidget(logo)
-    titles = QVBoxLayout()
-    titles.setSpacing(0)
-    title_label = QLabel(title)
-    title_label.setObjectName("HeaderTitle")
-    titles.addWidget(title_label)
-    if subtitle:
-        sub = QLabel(subtitle)
-        sub.setObjectName("HeaderSubtitle")
-        titles.addWidget(sub)
-    layout.addLayout(titles)
-    layout.addStretch()
-    return header
 
 
 def apply_theme(app: QApplication) -> None:
