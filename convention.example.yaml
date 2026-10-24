@@ -1,0 +1,40 @@
+version: 1
+name: "Convention Agence Exemple"
+language: fr
+
+structure:
+  # Gabarit de chemin relatif à la racine.
+  # Variables disponibles : {client}, {year}, {project}, {category}
+  template: "{client}/{year}/{project}/{category}"
+  project_format: "{project_code}_{project_name}"   # ex. 2026-042_Campagne-Noel
+  categories:
+    - { code: "01_Brief",     description: "Briefs, cahiers des charges, documents reçus du client" }
+    - { code: "02_Creation",  description: "Recherches, pistes, maquettes de travail" }
+    - { code: "03_Execution", description: "Fichiers d'exécution, déclinaisons, adaptations" }
+    - { code: "04_Livrables", description: "Fichiers finaux envoyés au client" }
+    - { code: "05_Sources",   description: "Photos, polices, logos, rushes reçus ou achetés" }
+    - { code: "06_Admin",     description: "Devis, bons de commande, factures, contrats" }
+
+naming:
+  template: "{date}_{client}_{project_code}_{description}_v{version}"
+  separator: "_"           # entre les segments du gabarit
+  word_separator: "-"      # à l'intérieur d'un segment : "Affiche-Abribus"
+  date_format: "%Y-%m-%d"
+  version_format: "{:02d}" # v01, v02...
+  ascii_only: true         # supprime les accents (compatibilité NAS / Windows / macOS)
+  max_length: 120
+  lowercase_extension: true
+  versioned_categories: ["02_Creation", "03_Execution", "04_Livrables"]
+
+clients:
+  - { code: "ACME",  name: "Acme Corporation", aliases: ["acme", "acme corp"] }
+  - { code: "BRIOC", name: "Brioches Dupont",  aliases: ["dupont", "brioches dupont"] }
+  # Importable depuis un CSV : python -m tribin import-clients clients.csv
+
+excluded_paths:            # motifs glob relatifs à la racine
+  - "**/_PROJET_EN_COURS/**"
+  - "**/Rushes/**"
+
+versions:
+  keep_older_in_subfolder: true
+  subfolder_name: "_versions"

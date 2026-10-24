@@ -1,0 +1,44 @@
+[project]
+name = "tribin"
+version = "0.1.0"
+description = "Corbeille intelligente : l'IA propose où ranger et comment renommer chaque fichier, selon la convention de l'équipe."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.7",
+    "anthropic>=0.40",
+    "pypdf>=4.0",
+    "pypdfium2>=4.0",
+    "python-docx>=1.1",
+    "openpyxl>=3.1",
+    "python-pptx>=0.6.23",
+    "Pillow>=10.1",
+    "psd-tools>=1.9",
+    "rapidfuzz>=3.0",
+    "imagehash>=4.3",
+    "pyyaml>=6.0",
+    "platformdirs>=4.0",
+    "python-dotenv>=1.0",
+    "keyring>=24.0",
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+ui = ["PySide6>=6.6"]
+
+[project.scripts]
+tribin = "tribin.__main__:main"
+
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tribin"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

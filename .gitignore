@@ -1,0 +1,26 @@
+# Secrets et données locales
+.env
+*.db
+*.db-journal
+
+# Données de test (générées ou réelles)
+sandbox/
+testset/
+eval_results/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+
+# Graphify
+graphify-out/
+
+# Système
+.DS_Store
+Thumbs.db
+desktop.ini
