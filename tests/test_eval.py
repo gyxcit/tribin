@@ -5,6 +5,7 @@ from pathlib import Path
 
 from fakes import oracle
 
+from tribin.engine.prompts import PROMPT_VERSION
 from tribin.engine.proposer import ProposeContext
 from tribin.eval.evaluate import run_eval, save_report
 
@@ -26,4 +27,4 @@ def test_eval_with_oracle_scores_100_and_writes_nothing(sandbox_dir: Path, tmp_p
     assert m["clients_corrects_pct"] == 100.0
     assert m["categories_correctes_pct"] == 100.0
     out = save_report(report, tmp_path / "eval_results")
-    assert out.exists() and "fake-model_p1" in out.name
+    assert out.exists() and f"fake-model_{PROMPT_VERSION}" in out.name

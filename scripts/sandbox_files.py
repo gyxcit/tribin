@@ -60,7 +60,17 @@ def write_pdf(path: Path, pages: list[list[str]]) -> None:
     path.write_bytes(out.getvalue())
 
 
+FONT_CANDIDATES = ("arial.ttf", "DejaVuSans.ttf", "/System/Library/Fonts/Supplemental/Arial.ttf",
+                   "/Library/Fonts/Arial.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")
+
+
 def _font(size: int) -> ImageFont.ImageFont:
+    """Police système avec les accents si possible ; sinon police intégrée de Pillow."""
+    for name in FONT_CANDIDATES:
+        try:
+            return ImageFont.truetype(name, size)
+        except OSError:
+            continue
     try:
         return ImageFont.load_default(size=size)
     except TypeError:  # Pillow < 10.1

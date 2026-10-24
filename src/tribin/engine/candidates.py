@@ -82,11 +82,28 @@ def _folder_score(file_tokens: set[str], codes: set[str], profile: FolderProfile
     return score
 
 
+def rangeable(profiles: list[FolderProfile]) -> list[FolderProfile]:
+    """Retire les dossiers intermédiaires vides (ex. « ACME/2026 ») : ils occupent des places sans être des
+    destinations de rangement. Un dossier vide sans sous-dossier reste candidat."""
+    parents = {p.rel.rsplit("/", 1)[0] for p in profiles if "/" in p.rel}
+    return [p for p in profiles if p.file_count or p.rel not in parents]
+
+
+def project_folders(profiles: list[FolderProfile], convention: Convention, limit: int = 60) -> list[str]:
+    """Dossiers projet existants (niveau {project} du gabarit), pour que l'IA puisse construire un chemin."""
+    levels = convention.structure.template.split("/")
+    if "{project}" not in levels:
+        return []
+    depth = levels.index("{project}") + 1
+    return sorted((p.rel for p in profiles if p.rel.count("/") + 1 == depth), key=str.lower)[:limit]
+
+
 def select_candidates(info: FileInfo, profiles: list[FolderProfile], convention: Convention,
                       client_code: str | None, limit: int = 15) -> list[Candidate]:
     """Les `limit` dossiers les plus pertinents ; ceux du client détecté sont toujours inclus en priorité."""
     file_tokens = _tokens(f"{split_extension(info.name)[0]} {info.text[:2000]} {' '.join(info.metadata.values())}")
     codes = set(PROJECT_CODE.findall(f"{info.name} {info.text}"))
+    profiles = rangeable(profiles)
     scored = [(_folder_score(file_tokens, codes, p, convention), p) for p in profiles]
     scored.sort(key=lambda sp: (-sp[0], sp[1].rel.lower()))
     prefix = f"{client_code.lower()}/" if client_code else None

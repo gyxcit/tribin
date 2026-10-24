@@ -39,6 +39,7 @@ class ProposeContext:
     examples_provider: Callable[[FileInfo, str | None], list[str]] | None = None
     version_detector: Callable[[FileInfo, Proposal, ProposeContext], None] | None = None
     rules_provider: Callable[[], list[str]] | None = None
+    project_folders: list[str] = field(default_factory=list)
     _phase1_cache: list[Candidate] | None = None
 
     def candidates(self, info: FileInfo, client_hint: str | None) -> list[Candidate]:
@@ -100,6 +101,7 @@ def build_prompt_data(info: FileInfo, ctx: ProposeContext, hint: str | None, can
         profile=ctx.profile,
         learned_rules=ctx.rules_provider() if ctx.rules_provider else ctx.learned_rules,
         candidate_folders=[c.render() for c in candidates],
+        project_folders=ctx.project_folders,
         correction_examples=examples,
         client_hint=hint or "",
         has_image=bool(info.images),

@@ -132,3 +132,29 @@ def test_candidates_contain_expected_folder(sandbox_dir: Path, expected):
         assert len(cands) <= 15
         hits += row["expected_folder"] in {c.rel for c in cands}
     assert hits >= 0.8 * len(expected), hits
+
+
+def test_intermediate_empty_folders_are_not_candidates(sandbox_dir: Path):
+    from tribin.engine.candidates import project_folders, rangeable
+
+    conv = load_convention(sandbox_dir / "convention.yaml")
+    profiles = scan_root(sandbox_dir / "root", conv)
+    kept = {p.rel for p in rangeable(profiles)}
+    assert "ACME/2026" not in kept and "ACME/2026/2026-042_Campagne-Noel" not in kept
+    assert "ACME/2026/2026-042_Campagne-Noel/06_Admin" in kept
+    projects = project_folders(profiles, conv)
+    assert len(projects) == 6 and "VELOM/2025/2025-055_Catalogue-2026" in projects
+
+
+def test_prompt_lists_existing_projects(sandbox_dir: Path, settings):
+    from fakes import fixed
+
+    from tribin.engine.context import make_context
+    from tribin.engine.proposer import propose
+
+    llm = fixed(target_folder="VELOM/2025/2025-055_Catalogue-2026/04_Livrables", description="Couverture")
+    ctx = make_context(sandbox_dir / "root", load_convention(sandbox_dir / "convention.yaml"), llm, settings)
+    propose(extract(sandbox_dir / "inbox" / "export_final_OK.jpg"), ctx)
+    prompt = llm.prompts[0]
+    assert "## Projets existants" in prompt and "VELOM/2025/2025-055_Catalogue-2026" in prompt
+    assert "dossier vide" not in prompt

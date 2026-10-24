@@ -7,7 +7,7 @@ from pathlib import Path
 from tribin.config import Settings
 from tribin.convention.loader import Convention
 from tribin.db import Database
-from tribin.engine.candidates import select_candidates
+from tribin.engine.candidates import project_folders, select_candidates
 from tribin.engine.clients import detect_client
 from tribin.engine.proposer import ProposeContext
 from tribin.learning.corrections import similar_examples
@@ -46,4 +46,5 @@ def make_context(root: Path, convention: Convention, llm: LLMProvider, settings:
     ctx.examples_provider = lambda info, hint: similar_examples(db, info, hint)
     ctx.rules_provider = lambda: [r.text for r in list_rules(db, only_enabled=True)]
     ctx.version_detector = apply_versioning
+    ctx.project_folders = project_folders(profiles, convention)
     return ctx

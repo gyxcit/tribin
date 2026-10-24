@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-PROMPT_VERSION = "p1"
+PROMPT_VERSION = "p2"
 
 SYSTEM_PROMPT = """Tu es l'assistant de rangement de fichiers d'une équipe. Ta mission : proposer
 le dossier où ranger un fichier et les éléments de son nouveau nom, en respectant
@@ -12,6 +12,8 @@ STRICTEMENT la convention d'équipe fournie.
 
 Règles :
 - Choisis de préférence un dossier existant parmi les candidats fournis.
+- Si aucun candidat ne convient, construis le chemin avec un projet de la liste
+  « Projets existants » et une catégorie de la convention.
 - Ne propose un nouveau dossier que s'il suit le gabarit de structure de la
   convention ; indique alors folder_is_new = true.
 - Le client doit être un code de la liste des clients. S'il est inconnu, mets
@@ -63,6 +65,7 @@ class PromptData:
     profile: str = ""
     learned_rules: list[str] = field(default_factory=list)
     candidate_folders: list[str] = field(default_factory=list)
+    project_folders: list[str] = field(default_factory=list)
     correction_examples: list[str] = field(default_factory=list)
     client_hint: str = ""
     has_image: bool = False
@@ -96,6 +99,7 @@ def build_user_prompt(d: PromptData) -> str:
         _section("Convention d'équipe", convention),
         _section("Règles apprises de cet utilisateur", _bullets(d.learned_rules)),
         _section("Dossiers candidats (chemin relatif — description)", _bullets(d.candidate_folders)),
+        _section("Projets existants", ", ".join(d.project_folders)),
         _section("Exemples de corrections passées (fichier d'origine → choix final)", _bullets(d.correction_examples)),
         _section("Indice", f"Client détecté automatiquement (peut être faux) : {d.client_hint}" if d.client_hint else ""),
         _section("Fichier à ranger", file_block),
