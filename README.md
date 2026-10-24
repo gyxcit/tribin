@@ -76,7 +76,8 @@ est occupé, le fichier revient avec le suffixe `_restaure`.
 - Aucun fichier n'est rangé hors des racines déclarées ni dans une zone exclue.
 - Les lots (plusieurs fichiers ou création de dossiers) passent par une simulation montrée avant exécution.
 - Entre deux disques (ex. ordinateur → NAS) : copie, vérification SHA-256, puis seulement retrait de l'original.
-- En développement, `TRIBIN_DEV_SANDBOX=1` (valeur par défaut) interdit toute opération hors de `./sandbox/`.
+- Depuis les sources, `TRIBIN_DEV_SANDBOX=1` (valeur par défaut) interdit toute opération hors de `./sandbox/` ;
+  l'application empaquetée (.exe, .app) travaille, elle, sur les vrais dossiers choisis au premier lancement.
 
 ## Installation (développement)
 

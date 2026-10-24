@@ -53,3 +53,13 @@ def test_load_settings_reads_env(monkeypatch, tmp_path):
 def test_sandbox_guard_is_on_by_default(monkeypatch, tmp_path):
     monkeypatch.delenv("TRIBIN_DEV_SANDBOX", raising=False)
     assert load_settings(env_file=tmp_path / "absent.env").dev_sandbox is True
+
+
+def test_sandbox_guard_is_off_by_default_in_packaged_app(monkeypatch, tmp_path):
+    import sys
+
+    monkeypatch.delenv("TRIBIN_DEV_SANDBOX", raising=False)
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    assert load_settings(env_file=tmp_path / "absent.env").dev_sandbox is False
+    monkeypatch.setenv("TRIBIN_DEV_SANDBOX", "1")  # toujours activable explicitement (test de fumée)
+    assert load_settings(env_file=tmp_path / "absent.env").dev_sandbox is True

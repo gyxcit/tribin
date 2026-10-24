@@ -8,6 +8,7 @@ from __future__ import annotations
 import getpass
 import logging
 import os
+import sys
 from dataclasses import dataclass, field, replace
 from functools import lru_cache
 from pathlib import Path
@@ -115,6 +116,11 @@ def read_api_key(provider: str = DEFAULT_PROVIDER) -> str | None:
         return None
 
 
+def is_packaged() -> bool:
+    """Vrai pour l'application empaquetée (PyInstaller) : le garde-fou sandbox y est inactif par défaut."""
+    return bool(getattr(sys, "frozen", False))
+
+
 def load_settings(env_file: Path | None = None) -> Settings:
     """Lit le fichier .env (s'il existe) puis les variables d'environnement."""
     load_dotenv(env_file or REPO_ROOT / ".env", override=False)
@@ -128,7 +134,7 @@ def load_settings(env_file: Path | None = None) -> Settings:
     if provider not in PROVIDERS:
         provider = DEFAULT_PROVIDER
     return Settings(
-        dev_sandbox=_env_bool("TRIBIN_DEV_SANDBOX", default=True),
+        dev_sandbox=_env_bool("TRIBIN_DEV_SANDBOX", default=not is_packaged()),
         sandbox_dir=sandbox_dir.resolve(),
         data_dir=data_dir,
         model=model_for(provider, os.environ.get("TRIBIN_MODEL", "").strip()),
