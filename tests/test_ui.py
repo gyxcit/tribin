@@ -24,7 +24,19 @@ NOEL = "ACME/2026/2026-042_Campagne-Noel"
 
 @pytest.fixture(scope="session")
 def qapp():
-    return app_mod.TriBinApplication.instance() or app_mod.TriBinApplication(["tribin-test"])
+    app = app_mod.TriBinApplication.instance() or app_mod.TriBinApplication(["tribin-test"])
+    yield app
+    QThreadPool.globalInstance().waitForDone(10000)
+    app.processEvents()
+    app.shutdown()  # libère Qt avant la fin de Python (évite un plantage à la fermeture sous Windows)
+
+
+def dispose(qapp, *widgets) -> None:
+    """Ferme et détruit les fenêtres créées par un test (destruction ordonnée, avant QApplication)."""
+    for widget in widgets:
+        widget.hide()
+        widget.deleteLater()
+    qapp.processEvents()
 
 
 @pytest.fixture
@@ -39,8 +51,10 @@ def controller(qapp, settings, sandbox_dir, monkeypatch):
                                 onboarding_done=True, privacy_accepted=True))
     c = app_mod.AppController(qapp, svc, show_ui=False)
     c.sb = sb
+    c.extra = []
     yield c
     QThreadPool.globalInstance().waitForDone(10000)
+    dispose(qapp, c.bin_window, c.drop_widget, c.tray, *c.extra)
 
 
 def wait(qapp, condition, timeout=20.0):
@@ -102,6 +116,7 @@ def test_queue_restored_after_restart(qapp, controller, settings):
                                   show_ui=False)
     other.refresh_queue()
     assert other.bin_window.table.rowCount() == 1
+    controller.extra += [other.bin_window, other.drop_widget, other.tray]
 
 
 def test_windows_are_constructible(qapp, controller):
@@ -109,9 +124,11 @@ def test_windows_are_constructible(qapp, controller):
     from tribin.ui.onboarding import OnboardingWizard
     from tribin.ui.settings import SettingsDialog
 
-    assert HistoryWindow(controller).table.columnCount() == 6
-    assert SettingsDialog(controller).roots.count() == 1
-    assert OnboardingWizard(controller).pageIds()
+    windows = [HistoryWindow(controller), SettingsDialog(controller), OnboardingWizard(controller)]
+    controller.extra += windows
+    assert windows[0].table.columnCount() == 6
+    assert windows[1].roots.count() == 1
+    assert windows[2].pageIds()
 
 
 def test_bin_icon_badge(qapp):

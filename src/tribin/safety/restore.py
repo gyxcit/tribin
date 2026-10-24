@@ -197,11 +197,11 @@ def read_records(journal_dir: Path) -> list[dict]:
 
 
 def latest_states(records: list[dict]) -> dict[str, dict]:
-    """État de chaque opération : sa dernière ligne."""
+    """État de chaque opération : sa dernière ligne (« _seq » : rang de cette ligne dans le journal)."""
     states: dict[str, dict] = {}
-    for record in records:
+    for seq, record in enumerate(records):
         if record.get("operation_id"):
-            states[record["operation_id"]] = record
+            states[record["operation_id"]] = {**record, "_seq": seq}
     return states
 
 
@@ -219,7 +219,8 @@ def select_operations(states: dict[str, dict], batch: str | None = None, operati
         if since and not _after(op.get("ts", ""), since):
             continue
         chosen.append(op)
-    chosen.sort(key=lambda o: (o.get("ts", ""), o.get("operation_id", "")), reverse=True)
+    # Ordre inverse exact du journal (deux opérations peuvent partager la même milliseconde).
+    chosen.sort(key=lambda o: o.get("_seq", 0), reverse=True)
     return chosen
 
 
@@ -299,7 +300,8 @@ def undo_one(op: dict, journal_dir: Path, execute: bool, user: str, guard=None) 
         result.update(status="failed", message=message)
         return result
     append_record(journal_dir, {**base, "status": "done"})
-    append_record(journal_dir, {**op, "ts": now_iso(), "status": "undone", "undone_by": undo_id})
+    original = {k: v for k, v in op.items() if not k.startswith("_")}
+    append_record(journal_dir, {**original, "ts": now_iso(), "status": "undone", "undone_by": undo_id})
     result["status"] = "undone"
     if target and Path(op.get("source", "")) != target and op.get("action") != "mkdir":
         result["message"] = f"emplacement d'origine occupé : restauré sous {target.name}"

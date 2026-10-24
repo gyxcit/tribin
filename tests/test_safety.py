@@ -351,3 +351,14 @@ def test_journal_lines_are_json(env, settings):
         for line in path.read_text(encoding="utf-8").splitlines():
             rec = json.loads(line)
             assert {"ts", "operation_id", "batch_id", "action", "status", "user", "app_version"} <= rec.keys()
+
+
+def test_undo_order_follows_journal_even_with_identical_timestamps(env, monkeypatch):
+    ex, root, inbox = env
+    monkeypatch.setattr(restore, "now_iso", lambda: "2026-10-24T10:00:00.000+02:00")  # même milliseconde partout
+    src = make(inbox / "a.pdf")
+    _, result = run(ex, [Choice(src, root, "NOUVEAU/Dossier", "A.pdf")])
+    results = ex.undo(batch_id=result.batch_id)
+    assert [r["action"] for r in results] == ["move", "mkdir", "mkdir"]
+    assert all(r["status"] == "undone" for r in results)
+    assert src.exists() and not (root / "NOUVEAU").exists()
