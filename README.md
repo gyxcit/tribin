@@ -4,6 +4,31 @@ Corbeille intelligente pour agences : on glisse un fichier, l'IA propose **où l
 selon la convention de l'équipe ; l'utilisateur valide ou corrige, et l'IA apprend de ses corrections.
 Spécification complète et état d'avancement : [SPEC.md](SPEC.md).
 
+## Aperçu
+
+<p align="center"><img src="docs/screenshots/logo.png" width="96" alt="Logo TriBin"></p>
+
+**Corbeille** : la file des fichiers en attente à gauche, la proposition du fichier sélectionné à droite
+(nom et dossier modifiables, explication de l'IA, autres pistes). La pastille indique la confiance :
+turquoise = sûr, corail = à vérifier.
+
+![Corbeille](docs/screenshots/corbeille.png)
+
+| Fichier à vérifier | Corbeille vide |
+|---|---|
+| ![Fichier à vérifier](docs/screenshots/corbeille-a-verifier.png) | ![Corbeille vide](docs/screenshots/corbeille-vide.png) |
+
+| Historique (tout est annulable) | Réglages |
+|---|---|
+| ![Historique](docs/screenshots/historique.png) | ![Réglages](docs/screenshots/reglages.png) |
+
+| Premier lancement | Widget de dépôt flottant |
+|---|---|
+| ![Onboarding](docs/screenshots/onboarding.png) | ![Widget de dépôt](docs/screenshots/widget-depot.png) |
+
+Captures réalisées avec des données de démonstration et une IA simulée ; pour les régénérer :
+`uv run python scripts/make_screenshots.py`.
+
 ## En cas d'urgence : retrouver et annuler des opérations
 
 Toutes les opérations sur les fichiers sont inscrites dans un **journal**, *avant* d'être exécutées.
