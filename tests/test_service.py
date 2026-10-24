@@ -116,3 +116,33 @@ def test_locked_file_stays_pending(settings, sb, monkeypatch):
     pending = svc.pending()
     assert pending[0].status == "ready" and "ferme-le" in pending[0].error
     assert Path(item.staged_path).exists()
+
+
+def test_auto_file_ranges_only_sure_proposals(settings, sb):
+    svc = service(settings, sb)  # confiance 0,9
+    item = svc.analyze(svc.drop(sb / "inbox" / "scan0042.pdf").file_id)
+    report = svc.auto_file()
+    assert [i.file_id for i in report.done] == [item.file_id] and not report.left
+    assert (sb / "root" / NOEL / "06_Admin" / item.proposal.new_name).exists() and svc.pending() == []
+    journal = svc.executor().journal
+    assert any(s.get("decision") == "auto" for s in journal.states().values())
+    assert journal.acceptance_rate() is None  # non relu : ne compte pas comme « accepté »
+
+
+def test_auto_file_leaves_doubtful_files(settings, sb):
+    svc = service(settings, sb, llm=fixed(target_folder=f"{NOEL}/06_Admin", description="Devis", confidence=0.7))
+    item = svc.analyze(svc.drop(sb / "inbox" / "scan0042.pdf").file_id)
+    report = svc.auto_file()
+    assert not report.done and report.left[0][1] == "confiance trop faible"
+    assert [i.file_id for i in svc.pending()] == [item.file_id]
+    assert [i.file_id for i in svc.auto_file(min_confidence=0.6).done] == [item.file_id]  # bouton « prêts »
+
+
+def test_auto_file_never_creates_folders(settings, sb):
+    svc = service(settings, sb, llm=fixed(target_folder="ACME/2027/2027-001_Nouveau/06_Admin", description="Devis",
+                                          confidence=0.95))
+    item = svc.analyze(svc.drop(sb / "inbox" / "scan0042.pdf").file_id)
+    report = svc.auto_file()
+    assert not report.done and report.left[0][1] == "un nouveau dossier serait créé"
+    assert [i.file_id for i in svc.pending()] == [item.file_id]
+    assert not (sb / "root" / "ACME" / "2027").exists()

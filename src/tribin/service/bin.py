@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from tribin.config import STAGING_DIRNAME, Settings, is_within
@@ -47,7 +47,7 @@ class Validation:
     file_id: str
     target_folder: str
     new_name: str
-    decision: str  # accepted | edited | alternative_chosen
+    decision: str  # accepted | edited | alternative_chosen | auto (rangé sans relecture : pas d'apprentissage)
 
 
 @dataclass
@@ -60,6 +60,18 @@ class Prepared:
     def needs_confirmation(self) -> bool:
         """Plus d'un fichier ou création de dossiers : la simulation DOIT être montrée à l'utilisateur."""
         return len(self.validations) > 1 or any(op.action == "mkdir" for op in self.batch.ops)
+
+
+AUTO_MIN_CONFIDENCE = 0.8  # rangement automatique (réglage) : seulement les propositions « sûres »
+READY_MIN_CONFIDENCE = 0.6  # bouton du widget : tous les fichiers « prêts » (sous ce seuil : « à vérifier »)
+
+
+@dataclass
+class AutoReport:
+    """Résultat d'un rangement automatique : fichiers rangés, et ceux laissés pour avis (avec la raison)."""
+
+    done: list[QueueItem] = field(default_factory=list)
+    left: list[tuple[QueueItem, str]] = field(default_factory=list)
 
 
 def archive_older_versions(batch: Batch, proposal, root: Path, folder: str, convention: Convention,
@@ -246,6 +258,47 @@ class BinService:
                 self.queue.set_status(v.file_id, "ready", op.error if op else "Opération introuvable.")
         return result
 
+    def auto_file(self, file_ids: list[str] | None = None, min_confidence: float = AUTO_MIN_CONFIDENCE) -> AutoReport:
+        """Range sans intervention les propositions assez sûres, un fichier par lot.
+
+        Comme pour un rangement manuel, chaque fichier est simulé d'abord. Un fichier qui demande la création
+        d'un dossier, ou dont la simulation signale un problème, n'est PAS rangé : il attend l'avis de
+        l'utilisateur (section 3.1 : création de dossiers et lots passent par une simulation montrée).
+        """
+        report = AutoReport()
+        with self._lock:  # analyses terminées en même temps : un seul rangement automatique à la fois
+            for item in self.pending():
+                if file_ids is not None and item.file_id not in file_ids:
+                    continue
+                p = item.proposal
+                if item.status == "analyzing":
+                    continue
+                if item.status != "ready" or not p or p.manual or not p.target_folder or not p.new_name:
+                    report.left.append((item, "à ranger à la main"))
+                    continue
+                if p.confidence < min_confidence:
+                    report.left.append((item, "confiance trop faible"))
+                    continue
+                try:
+                    prepared = self.prepare([Validation(item.file_id, p.target_folder, p.new_name, "auto")])
+                except BinError as exc:
+                    report.left.append((item, str(exc)))
+                    continue
+                if not prepared.report.ok:
+                    report.left.append((item, " ; ".join(x for xs in prepared.report.problems.values() for x in xs)))
+                    continue
+                if prepared.needs_confirmation:
+                    report.left.append((item, "un nouveau dossier serait créé"))
+                    continue
+                self.commit(prepared)
+                after = self.queue.get(item.file_id)
+                if after and after.status == "done":
+                    report.done.append(after)
+                else:
+                    report.left.append((item, (after.error if after else None) or "rangement impossible"))
+        log.info("auto_file: %d rangé(s), %d laissé(s)", len(report.done), len(report.left))
+        return report
+
     def _after_placement(self, v: Validation, op) -> None:
         """Apprentissage : enregistre la décision, mémorise l'emplacement (signal implicite), résume les règles."""
         item = self.queue.get(v.file_id)
@@ -258,7 +311,7 @@ class BinService:
                               item.proposal, v.target_folder, op.destination.name, v.decision)
             remember_placement(self.db, op.operation_id, op.destination, Path(item.root), v.target_folder,
                                op.destination.name, original, item.proposal.client_hint)
-            if v.decision != "accepted":
+            if v.decision not in ("accepted", "auto"):
                 maybe_summarize(self.db, self.context(Path(item.root)).llm)
         except Exception:
             log.exception("learning hook failed")

@@ -8,10 +8,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QPoint, Qt, Signal
-from PySide6.QtGui import QColor, QDragEnterEvent, QDropEvent, QMouseEvent
+from PySide6.QtGui import QDragEnterEvent, QDropEvent, QMouseEvent
 from PySide6.QtWidgets import (
     QFrame,
-    QGraphicsDropShadowEffect,
     QHBoxLayout,
     QLabel,
     QProgressBar,
@@ -26,13 +25,16 @@ from tribin.ui.icons import logo_pixmap
 from tribin.ui.theme import NAVY
 
 STYLE = f"""
-QFrame#Idle, QFrame#Busy {{ background: {NAVY}; border-radius: 16px; }}
-QFrame#Idle QLabel, QFrame#Busy QLabel {{ color: white; background: transparent; }}
+QFrame#Idle, QFrame#Busy, QFrame#Ready {{ background: {NAVY}; border: none; border-radius: 16px; }}
+QFrame#Idle QLabel, QFrame#Busy QLabel, QFrame#Ready QLabel {{ color: white; background: transparent; }}
 QFrame#Hover {{ background: white; border: 3px dashed #14B8A6; border-radius: 20px; }}
-QFrame#Hover QLabel, QFrame#Ready QLabel {{ background: transparent; }}
-QFrame#Ready {{ background: white; border-radius: 16px; }}
+QFrame#Hover QLabel {{ background: transparent; }}
 QLabel#WTitle {{ font-weight: 700; font-size: 14px; }}
 QLabel#WSub {{ color: #C9CDE6; font-size: 12px; }}
+QPushButton#WAuto {{ background: #14B8A6; color: {NAVY}; border: none; border-radius: 8px; padding: 8px 12px; font-weight: 700; }}
+QPushButton#WAuto:hover {{ background: #2DD4BF; }}
+QPushButton#WOpen {{ background: transparent; color: white; border: 1px solid #4A5280; border-radius: 8px; padding: 7px 12px; font-weight: 600; }}
+QPushButton#WOpen:hover {{ background: #2C3460; }}
 QProgressBar {{ background: #3A4270; border: none; border-radius: 3px; max-height: 6px; }}
 QProgressBar::chunk {{ background: #14B8A6; border-radius: 3px; }}
 """
@@ -42,17 +44,10 @@ def dropped_paths(event: QDropEvent) -> list[Path]:
     return [Path(url.toLocalFile()) for url in event.mimeData().urls() if url.isLocalFile()]
 
 
-def _shadow(widget: QWidget) -> None:
-    effect = QGraphicsDropShadowEffect(widget)
-    effect.setBlurRadius(24)
-    effect.setOffset(0, 8)
-    effect.setColor(QColor(20, 26, 60, 70))
-    widget.setGraphicsEffect(effect)
-
-
 class DropWidget(QWidget):
     files_dropped = Signal(list)
     clicked = Signal()
+    auto_clicked = Signal()  # « Ranger les N prêts » : sans ouvrir la fenêtre
 
     def __init__(self) -> None:
         super().__init__(None, Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool)
@@ -83,7 +78,7 @@ class DropWidget(QWidget):
         big = QLabel()
         big.setPixmap(logo_pixmap(64))
         big.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        drop = QLabel("Dépose pour trier")
+        drop = QLabel("Déposez pour trier")
         drop.setObjectName("WTitle")
         drop.setStyleSheet("color: #0F766E;")
         drop.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -107,14 +102,14 @@ class DropWidget(QWidget):
         top.addWidget(self.busy_count)
         self.progress = QProgressBar()
         self.progress.setTextVisible(False)
-        hint = QLabel("Tu peux continuer à travailler.")
+        hint = QLabel("Vous pouvez continuer à travailler.")
         hint.setObjectName("WSub")
         column.addLayout(top)
         column.addWidget(self.progress)
         column.addWidget(hint)
 
         self.ready_card = self._card("Ready")
-        self.ready_card.setFixedWidth(212)
+        self.ready_card.setFixedWidth(230)
         column = QVBoxLayout(self.ready_card)
         column.setContentsMargins(14, 12, 14, 14)
         column.setSpacing(10)
@@ -130,17 +125,23 @@ class DropWidget(QWidget):
         chips.addWidget(self.ready_pill)
         chips.addWidget(self.check_pill)
         chips.addStretch()
-        open_button = QPushButton("Ouvrir TriBin")
-        open_button.setObjectName("Primary")
-        open_button.clicked.connect(self.clicked)
+        self.auto_button = QPushButton()
+        self.auto_button.setObjectName("WAuto")
+        self.auto_button.setToolTip("Range les fichiers prêts sans ouvrir la fenêtre. Un fichier qui demanderait "
+                                    "un nouveau dossier attend votre avis. Tout s'annule depuis l'Historique.")
+        self.auto_button.clicked.connect(self.auto_clicked)
+        self.open_button = QPushButton("Ouvrir TriBin")
+        self.open_button.setObjectName("WOpen")
+        self.open_button.clicked.connect(self.clicked)
         column.addLayout(top)
         column.addLayout(chips)
-        column.addWidget(open_button)
+        column.addWidget(self.auto_button)
+        column.addWidget(self.open_button)
 
         for card in (self.idle, self.hover, self.busy, self.ready_card):
             self.stack.addWidget(card)
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(14, 10, 14, 18)  # place pour l'ombre
+        outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(self.stack)
         self._update()
 
@@ -148,7 +149,6 @@ class DropWidget(QWidget):
     def _card(name: str) -> QFrame:
         card = QFrame()
         card.setObjectName(name)
-        _shadow(card)
         return card
 
     # --- état ---------------------------------------------------------------------------------
@@ -177,6 +177,8 @@ class DropWidget(QWidget):
             self.ready_pill.setVisible(bool(c["ready"]))
             self.check_pill.setText(f"{c['check']} à vérifier")
             self.check_pill.setVisible(bool(c["check"]))
+            self.auto_button.setText(f"Ranger les {c['ready']} prêts" if c["ready"] > 1 else "Ranger le fichier prêt")
+            self.auto_button.setVisible(bool(c["ready"]))
             card = self.ready_card
         else:
             card = self.idle

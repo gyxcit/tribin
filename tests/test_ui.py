@@ -299,3 +299,20 @@ def test_folder_picker_one_by_one(qapp, tmp_path):
     remove = next(b for b in excluded.findChildren(QPushButton) if b.text() == "Retirer")
     remove.click()
     assert excluded.values() == []
+
+
+def test_auto_mode_and_widget_button(qapp, controller):
+    widget = controller.drop_widget
+    widget.set_state(total=3, ready=2, check=1)
+    assert widget.auto_button.isVisibleTo(widget) and widget.auto_button.text() == "Ranger les 2 prêts"
+    widget.set_state(total=1, check=1)
+    assert not widget.auto_button.isVisibleTo(widget)
+
+    cfg = controller.service.config
+    cfg.auto_file = True
+    controller.service.update_config(cfg)
+    controller.drop_paths([controller.sb / "inbox" / "scan0042.pdf"])
+    placed = controller.sb / "root" / NOEL / "06_Admin" / "2026-10-12_ACME_2026-042_Devis-impression.pdf"
+    assert wait(qapp, placed.exists)  # confiance 0,9 : rangé sans aucun clic
+    assert wait(qapp, lambda: not controller.service.pending())
+    assert wait(qapp, lambda: not controller._notice_timer.isActive() and controller._notice["done"] == 0, 5)

@@ -39,9 +39,12 @@ class Journal:
         return ops
 
     def acceptance_rate(self) -> float | None:
-        """Taux de propositions acceptées sans modification (indicateur principal en usage réel)."""
+        """Taux de propositions acceptées sans modification (indicateur principal en usage réel).
+
+        Les rangements automatiques (« auto ») n'ont été relus par personne : ils ne comptent pas."""
         decisions = [op.get("decision") for op in self.states().values()
-                     if op.get("action") == "move" and op.get("status") in {"done", "undone"} and op.get("decision")]
+                     if op.get("action") == "move" and op.get("status") in {"done", "undone"}
+                     and op.get("decision") not in (None, "auto")]
         if not decisions:
             return None
         return sum(d == "accepted" for d in decisions) / len(decisions)

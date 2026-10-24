@@ -33,6 +33,7 @@ class Tray(QSystemTrayIcon):
         self._menu = menu
         self.setContextMenu(menu)
         self.activated.connect(self._activated)
+        self.messageClicked.connect(controller.show_bin)  # « … demande votre avis : cliquez pour ouvrir »
         self.set_count(0)
 
     def _activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:

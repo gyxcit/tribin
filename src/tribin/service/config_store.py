@@ -15,6 +15,7 @@ class AppConfig(BaseModel):
     local_excluded: list[str] = Field(default_factory=list)  # zones exclues propres à ce poste (motifs glob)
     provider: str = ""  # vide : fournisseur des réglages (.env) ; sinon "anthropic", "gemini" ou "mistral"
     model: str = ""  # vide : modèle par défaut des réglages (.env)
+    auto_file: bool = False  # ranger tout seul les propositions sûres ; les autres attendent un avis
     onboarding_done: bool = False
     privacy_accepted: bool = False
 

@@ -16,7 +16,7 @@ from tribin.config import get_settings, setup_logging
 from tribin.fs.filters import is_being_written
 from tribin.llm import make_provider
 from tribin.llm.base import LLMError
-from tribin.service.bin import BinError, BinService, Validation
+from tribin.service.bin import AUTO_MIN_CONFIDENCE, READY_MIN_CONFIDENCE, AutoReport, BinError, BinService, Validation
 from tribin.ui.icons import app_icon
 from tribin.ui.theme import apply_theme
 from tribin.ui.workers import run_task
@@ -25,6 +25,7 @@ log = logging.getLogger(__name__)
 
 MAX_WRITE_RETRIES = 5
 RETRY_MS = 5000
+NOTICE_MS = 1500  # regroupe les notifications des analyses qui se terminent presque en même temps
 
 
 def server_name() -> str:
@@ -64,8 +65,14 @@ class AppController:
         self.drop_widget = DropWidget()
         self.drop_widget.files_dropped.connect(self.drop_paths)
         self.drop_widget.clicked.connect(self.show_bin)
+        self.drop_widget.auto_clicked.connect(self.auto_file_ready)
         self.tray = Tray(self)
         self._tasks: set = set()
+        self._notice = {"done": 0, "review": []}  # rangés automatiquement / laissés pour avis, à annoncer
+        self._notice_timer = QTimer()
+        self._notice_timer.setSingleShot(True)
+        self._notice_timer.setInterval(NOTICE_MS)
+        self._notice_timer.timeout.connect(self._flush_notice)
         self.confirm_simulation = self._show_simulation  # remplaçable dans les tests
         if show_ui:
             self.tray.show()
@@ -129,7 +136,38 @@ class AppController:
         self._run(stage, on_done=done)
 
     def _analyze(self, file_id: str) -> None:
-        self._run(self.service.analyze, file_id, on_done=lambda _: self.refresh_queue())
+        def analyzed(_) -> None:
+            self.refresh_queue()
+            if self.service.config.auto_file:
+                self._run(self.service.auto_file, [file_id], AUTO_MIN_CONFIDENCE, on_done=self._auto_done)
+
+        self._run(self.service.analyze, file_id, on_done=analyzed)
+
+    # --- rangement automatique ------------------------------------------------------------------
+
+    def auto_file_ready(self) -> None:
+        """Bouton du widget : range tous les fichiers « prêts », sans ouvrir la fenêtre."""
+        self._run(self.service.auto_file, None, READY_MIN_CONFIDENCE, on_done=self._auto_done)
+
+    def _auto_done(self, report: AutoReport) -> None:
+        self.refresh_queue()
+        self._notice["done"] += len(report.done)
+        self._notice["review"] += [item.name for item, _ in report.left]
+        if report.done or report.left:
+            self._notice_timer.start()
+
+    def _flush_notice(self) -> None:
+        done, review = self._notice["done"], self._notice["review"]
+        self._notice = {"done": 0, "review": []}
+        lines = []
+        if done:
+            lines.append(f"{done} fichier{'s' if done > 1 else ''} rangé{'s' if done > 1 else ''} automatiquement "
+                         "(annulable depuis l'Historique).")
+        if review:
+            names = f"« {review[0]} »" if len(review) == 1 else f"{len(review)} fichiers"
+            lines.append(f"{names} demande{'nt' if len(review) > 1 else ''} votre avis : cliquez pour ouvrir TriBin.")
+        if lines:
+            self.tray.showMessage("TriBin", "\n".join(lines))
 
     def validate(self, validations: list[Validation], force_simulation: bool = False) -> None:
         def prepared(p) -> None:

@@ -114,6 +114,11 @@ fichier déjà prêt), quelques questions facultatives, choix de l'IA. Ensuite :
   Réglages › Système) ;
 - macOS (application empaquetée) : glisser sur l'icône du Dock.
 
+Depuis le widget, « Ranger les N prêts » range les fichiers prêts sans ouvrir la fenêtre. Dans Réglages › Dossiers,
+le **rangement automatique** (désactivé par défaut) range tout seul les fichiers dont l'IA est sûre (confiance d'au
+moins 80 %) ; les autres font l'objet d'une notification qui ouvre TriBin. Un fichier qui demanderait la création d'un
+dossier attend toujours votre accord, et tout s'annule depuis l'Historique.
+
 Dans la fenêtre principale : `Entrée` ranger, `E` modifier le nom, `A` autre possibilité, `Échap` passer, `R` renvoyer à l'origine.
 Chaque rangement s'annule depuis l'Historique.
 

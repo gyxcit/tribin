@@ -223,6 +223,9 @@ class HistoryView(QWidget):
         if decisions.count("accepted"):
             details.append(f"{plural(decisions.count('accepted'), 'proposition')} acceptée"
                            f"{'s' if decisions.count('accepted') > 1 else ''} telle{'s' if decisions.count('accepted') > 1 else ''} quelle{'s' if decisions.count('accepted') > 1 else ''}")
+        if decisions.count("auto"):
+            details.append(f"{plural(decisions.count('auto'), 'fichier')} rangé{'s' if decisions.count('auto') > 1 else ''}"
+                           " automatiquement")
         changed = decisions.count("edited") + decisions.count("alternative_chosen")
         if changed:
             details.append(f"{changed} modifiée{'s' if changed > 1 else ''} par vous")

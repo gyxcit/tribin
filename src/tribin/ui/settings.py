@@ -11,6 +11,7 @@ from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QButtonGroup,
+    QCheckBox,
     QComboBox,
     QDialog,
     QFileDialog,
@@ -33,6 +34,7 @@ from PySide6.QtWidgets import (
 from tribin.config import save_api_key
 from tribin.learning.corrections import team_rule_alerts
 from tribin.learning.rules_store import delete_rule, list_rules, update_rule
+from tribin.service.bin import AUTO_MIN_CONFIDENCE
 from tribin.service.profile import PRIVACY_NOTICE, save_profile
 from tribin.ui import system_integration
 from tribin.ui.components import ChoiceCard, divider, muted, section
@@ -185,6 +187,13 @@ class SettingsDialog(QDialog):
         remap.clicked.connect(self.c.remap)
         page.add_row("Convention de rangement", "Fichier partagé par l'équipe, sur cet ordinateur ou le NAS.",
                      column(conv_row, remap))
+        self.auto_file = QCheckBox("Ranger tout seul les fichiers dont l'IA est sûre")
+        self.auto_file.setChecked(cfg.auto_file)
+        page.add_row("Rangement automatique",
+                     f"Confiance d'au moins {AUTO_MIN_CONFIDENCE:.0%}".replace("%", " %") + ". Les autres fichiers "
+                     "attendent votre avis : TriBin vous prévient.",
+                     column(self.auto_file, muted("Un fichier qui demanderait un nouveau dossier attend toujours votre "
+                                                  "accord. Tout rangement s'annule depuis l'Historique.")))
         return page
 
     def _ai_page(self) -> SettingsPage:
@@ -320,6 +329,7 @@ class SettingsDialog(QDialog):
         cfg.roots = self.roots.values()
         cfg.local_excluded = self.excluded.values()
         cfg.convention_path = self.convention.text().strip()
+        cfg.auto_file = self.auto_file.isChecked()
         provider = self.provider()
         cfg.provider = provider
         cfg.model = self.model.currentText().strip()
