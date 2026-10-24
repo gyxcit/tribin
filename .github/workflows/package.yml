@@ -1,6 +1,6 @@
 name: package
 
-# Empaquetage minimal non signé (phase 4) : TriBin.exe (Windows) et TriBin.app (macOS).
+# Empaquetage minimal non signé (phase 4) : TriBin.exe (Windows) et TriBin.app (macOS), puis test de fumée.
 on: workflow_dispatch
 
 jobs:
@@ -8,7 +8,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
+        include:
+          - os: macos-latest
+            exe: dist/TriBin.app/Contents/MacOS/TriBin
+          - os: windows-latest
+            exe: dist/TriBin/TriBin.exe
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -16,6 +20,10 @@ jobs:
       - run: uv sync --extra ui --extra packaging
       - run: uv run python scripts/make_icons.py
       - run: uv run pyinstaller packaging/tribin.spec --noconfirm
+      - name: Test de fumée de l'application empaquetée
+        run: uv run python scripts/smoke_packaged.py ${{ matrix.exe }}
+        env:
+          PYTHONIOENCODING: utf-8
       - uses: actions/upload-artifact@v4
         with:
           name: TriBin-${{ matrix.os }}
