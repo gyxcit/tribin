@@ -237,7 +237,12 @@ class Executor:
                 self.journal.write(op.record("pending", self.user))
                 return
             self.journal.write(op.record("pending", self.user))
-            op.destination.mkdir()
+            try:
+                op.destination.mkdir()
+            except FileExistsError:
+                if not op.destination.is_dir():
+                    raise
+                op.already_existed = True  # créé entre-temps (autre lot) : l'annulation ne le retirera pas
             return
         src = op.source
         # Vérifier l'existence JUSTE AVANT l'opération ; collision -> suffixe _2, _3…

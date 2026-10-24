@@ -24,3 +24,8 @@ graphify-out/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Icônes générées par scripts/make_icons.py
+packaging/tribin.ico
+packaging/tribin.icns
+packaging/tribin.png

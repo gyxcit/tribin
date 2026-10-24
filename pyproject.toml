@@ -24,7 +24,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-ui = ["PySide6>=6.6"]
+ui = ["PySide6-Essentials>=6.6"]
+packaging = ["pyinstaller>=6.0"]
 
 [project.scripts]
 tribin = "tribin.__main__:main"

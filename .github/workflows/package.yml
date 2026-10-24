@@ -1,0 +1,22 @@
+name: package
+
+# Empaquetage minimal non signé (phase 4) : TriBin.exe (Windows) et TriBin.app (macOS).
+on: workflow_dispatch
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --extra ui --extra packaging
+      - run: uv run python scripts/make_icons.py
+      - run: uv run pyinstaller packaging/tribin.spec --noconfirm
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TriBin-${{ matrix.os }}
+          path: dist/

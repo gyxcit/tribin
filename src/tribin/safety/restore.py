@@ -19,6 +19,7 @@ import hashlib
 import json
 import os
 import sys
+import threading
 import time
 import unicodedata
 from datetime import datetime
@@ -31,6 +32,7 @@ RESTORE_SUFFIX = "_restaure"
 FILE_ACTIONS = {"stage", "move", "rename", "archive"}
 REVERSIBLE = FILE_ACTIONS | {"mkdir"}
 _ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+_JOURNAL_LOCK = threading.Lock()  # écritures concurrentes (analyses en arrière-plan)
 
 
 # --- utilitaires ------------------------------------------------------------------------------
@@ -171,7 +173,7 @@ def append_record(journal_dir: Path, record: dict) -> dict:
     record = {"ts": now_iso(), **record}
     record.setdefault("app_version", APP_VERSION)
     line = json.dumps(record, ensure_ascii=False, default=str)
-    with open(journal_file(journal_dir), "a", encoding="utf-8", newline="\n") as fh:
+    with _JOURNAL_LOCK, open(journal_file(journal_dir), "a", encoding="utf-8", newline="\n") as fh:
         fh.write(line + "\n")
         fh.flush()
         os.fsync(fh.fileno())
