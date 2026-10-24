@@ -1,4 +1,4 @@
-"""Fabrique du fournisseur d'IA configuré (Anthropic ou Gemini)."""
+"""Fabrique du fournisseur d'IA configuré (Anthropic, Gemini ou Mistral)."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from tribin.llm.base import LLMError, LLMProvider
 KEY_HINTS = {
     "anthropic": "ANTHROPIC_API_KEY",
     "gemini": "GEMINI_API_KEY",
+    "mistral": "MISTRAL_API_KEY",
 }
 
 
@@ -23,6 +24,12 @@ def make_provider(settings: Settings, model: str | None = None, provider: str | 
     if not settings.api_key:
         raise LLMError(f"Clé API {name.capitalize()} manquante : renseigne {KEY_HINTS[name]} dans le fichier .env "
                        "(ou dans les réglages de l'application).")
+    if name == "mistral":
+        try:
+            from tribin.llm.mistral_provider import MistralProvider
+        except ImportError as exc:
+            raise LLMError("Le module Mistral n'est pas installé : lance « uv sync --extra mistral ».") from exc
+        return MistralProvider(api_key=settings.api_key, model=settings.model)
     if name == "gemini":
         try:
             from tribin.llm.gemini_provider import GeminiProvider

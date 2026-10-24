@@ -13,7 +13,7 @@ class AppConfig(BaseModel):
     roots: list[str] = Field(default_factory=list)
     convention_path: str = ""
     local_excluded: list[str] = Field(default_factory=list)  # zones exclues propres à ce poste (motifs glob)
-    provider: str = ""  # vide : fournisseur des réglages (.env) ; sinon "anthropic" ou "gemini"
+    provider: str = ""  # vide : fournisseur des réglages (.env) ; sinon "anthropic", "gemini" ou "mistral"
     model: str = ""  # vide : modèle par défaut des réglages (.env)
     onboarding_done: bool = False
     privacy_accepted: bool = False

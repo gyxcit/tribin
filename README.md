@@ -41,12 +41,12 @@ est occupé, le fichier revient avec le suffixe `_restaure`.
 Prérequis : [uv](https://docs.astral.sh/uv/) (il installe Python 3.12 si besoin).
 
 ```bash
-uv sync --extra ui --extra gemini
+uv sync --extra ui --extra gemini --extra mistral
 ```
 
-Copier `.env.example` en `.env`, choisir le fournisseur d'IA (`TRIBIN_PROVIDER=anthropic` ou `gemini`) et mettre
-la clé correspondante (`ANTHROPIC_API_KEY` ou `GEMINI_API_KEY`). Pour Gemini, installer aussi le module :
-`uv sync --extra ui --extra gemini`. Dans l'application, le fournisseur se choisit dans Réglages > IA et
+Copier `.env.example` en `.env`, choisir le fournisseur d'IA (`TRIBIN_PROVIDER=anthropic`, `gemini` ou `mistral`) et mettre
+la clé correspondante (`ANTHROPIC_API_KEY`, `GEMINI_API_KEY` ou `MISTRAL_API_KEY`). Pour Gemini et Mistral, installer
+aussi leur module : `uv sync --extra ui --extra gemini --extra mistral`. Dans l'application, le fournisseur se choisit dans Réglages > IA et
 confidentialité, et la clé est rangée dans le trousseau du système.
 
 ```bash

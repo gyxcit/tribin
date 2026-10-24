@@ -24,6 +24,9 @@ PROVIDERS: dict[str, dict] = {
                   "default_model": "claude-haiku-5-5", "prefix": "claude"},
     "gemini": {"env": ("GEMINI_API_KEY", "GOOGLE_API_KEY"), "keyring": "gemini_api_key",
                "default_model": "gemini-flash-latest", "prefix": "gemini"},
+    "mistral": {"env": ("MISTRAL_API_KEY",), "keyring": "mistral_api_key",
+                "default_model": "mistral-small-latest",
+                "prefix": ("mistral", "magistral", "ministral", "pixtral", "codestral", "devstral")},
 }
 DEFAULT_PROVIDER = "anthropic"
 DEFAULT_MODEL = PROVIDERS[DEFAULT_PROVIDER]["default_model"]
@@ -91,7 +94,7 @@ class Settings:
 def model_for(provider: str, model: str | None) -> str:
     """Le modèle demandé s'il correspond au fournisseur, sinon le modèle par défaut de ce fournisseur."""
     info = PROVIDERS[provider]
-    if model and model.lower().startswith(info["prefix"]):
+    if model and model.lower().startswith(info["prefix"]):  # str ou tuple de préfixes
         return model
     return info["default_model"]
 

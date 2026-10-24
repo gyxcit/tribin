@@ -38,8 +38,9 @@ if TYPE_CHECKING:
     from tribin.ui.app import AppController
 
 MODELS = {"anthropic": ["claude-haiku-5-5", "claude-sonnet-5-5"],
-          "gemini": ["gemini-flash-latest", "gemini-flash-lite-latest", "gemini-pro-latest"]}
-PROVIDER_LABELS = {"anthropic": "Anthropic (Claude)", "gemini": "Google (Gemini)"}
+          "gemini": ["gemini-flash-latest", "gemini-flash-lite-latest", "gemini-pro-latest"],
+          "mistral": ["mistral-small-latest", "mistral-medium-latest", "mistral-large-latest"]}
+PROVIDER_LABELS = {"anthropic": "Anthropic (Claude)", "gemini": "Google (Gemini)", "mistral": "Mistral AI"}
 
 
 def path_list(items: list[str]) -> tuple[QWidget, QListWidget]:
@@ -170,7 +171,7 @@ class SettingsDialog(QDialog):
         self.model.clear()
         self.model.addItems(MODELS[provider])
         has_key = bool(self.c.service.settings.for_provider(provider).api_key)
-        self.api_key.setPlaceholderText("déjà enregistrée" if has_key else ("sk-ant-…" if provider == "anthropic" else "clé Gemini"))
+        self.api_key.setPlaceholderText("déjà enregistrée" if has_key else ({"anthropic": "sk-ant-…"}.get(provider, f"clé {PROVIDER_LABELS[provider]}")))
 
     def _browse_convention(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "Fichier de convention", self.convention.text(), "YAML (*.yaml *.yml)")
