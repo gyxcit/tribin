@@ -20,7 +20,8 @@ MAX_PATH_LENGTH = 250
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 _VERSION_PATTERNS = [
     re.compile(r"(?:^|[_\-\s.])v(?:ersion)?[_\-\s]?(\d{1,3})(?=$|[_\-\s.(])", re.IGNORECASE),
-    re.compile(r"[_\-\s](\d{1,2})$"),
+    # « visuel_3 », mais pas la fin d'une heure ou d'une date (« …T08_57_09 », « …2026_03 ») : chiffre avant le séparateur
+    re.compile(r"(?<!\d)[_\-\s](\d{1,2})$"),
 ]
 
 

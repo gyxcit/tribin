@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-PROMPT_VERSION = "p4"
+PROMPT_VERSION = "p5"
 
 SYSTEM_PROMPT = """Tu es l'assistant de rangement de fichiers d'une équipe. Ta mission : proposer
 le dossier où ranger un fichier et les éléments de son nouveau nom, en respectant
@@ -16,6 +16,11 @@ Règles :
   « Projets existants » et une catégorie de la convention.
 - Ne propose un nouveau dossier que s'il suit le gabarit de structure de la
   convention ; indique alors folder_is_new = true.
+- Si la section « Fichiers du même modèle de nom déjà rangés » est présente,
+  l'utilisateur range déjà ce type de fichier dans ce dossier : c'est la
+  destination la plus probable, MÊME s'il ne suit pas le gabarit (dossier
+  personnel, RH, banque…). Choisis-le avec confidence 0.85 à 0.95, sauf si le
+  contenu du fichier le contredit ; client et projet peuvent alors rester null.
 - Le client doit être un code de la liste des clients. S'il est inconnu, mets
   client = null et explique-le dans reasoning.
 - target_folder ne contient JAMAIS « null », « None », « inconnu » ni un champ du
@@ -81,6 +86,7 @@ class PromptData:
     candidate_folders: list[str] = field(default_factory=list)
     project_folders: list[str] = field(default_factory=list)
     correction_examples: list[str] = field(default_factory=list)
+    similar_files: list[str] = field(default_factory=list)
     client_hint: str = ""
     has_image: bool = False
     extra_notes: list[str] = field(default_factory=list)
@@ -114,6 +120,7 @@ def build_user_prompt(d: PromptData) -> str:
         _section("Règles apprises de cet utilisateur", _bullets(d.learned_rules)),
         _section("Dossiers candidats (chemin relatif — description)", _bullets(d.candidate_folders)),
         _section("Projets existants", ", ".join(d.project_folders)),
+        _section("Fichiers du même modèle de nom déjà rangés", _bullets(d.similar_files)),
         _section("Exemples de corrections passées (fichier d'origine → choix final)", _bullets(d.correction_examples)),
         _section("Indice", f"Client détecté automatiquement (peut être faux) : {d.client_hint}" if d.client_hint else ""),
         _section("Fichier à ranger", file_block),

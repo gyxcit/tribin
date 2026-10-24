@@ -50,7 +50,11 @@ def infer_convention(profiles: list[FolderProfile], name: str = "Convention déd
     category_names = by_level.get(category_level, Counter())
     categories = [Category(code=n, description="") for n, c in sorted(category_names.items()) if c >= 2] or \
         [Category(code=n) for n in sorted(category_names)]
-    clients = [Client(code=_client_code(n), name=n, aliases=[n.lower()]) for n in sorted(by_level.get(0, Counter()))]
+    # Clients : dossiers de premier niveau qui suivent la structure dominante (« Administratif », « personnel »…,
+    # moins profonds, sont des dossiers libres et non des clients).
+    structured = {p.rel.split("/")[0] for p in profiles if len(p.rel.split("/")) >= depth}
+    top = sorted(n for n in by_level.get(0, Counter()) if n in structured) or sorted(by_level.get(0, Counter()))
+    clients = [Client(code=_client_code(n), name=n, aliases=[n.lower()]) for n in top]
     seen, unique_clients = set(), []
     for c in clients:
         if c.code not in seen:

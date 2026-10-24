@@ -135,6 +135,8 @@ def test_full_path_too_long_warns_when_impossible():
     ("affiche_v2.psd", 2), ("affiche_V02.psd", 2), ("affiche-v3.ai", 3), ("visuel_3.jpg", 3),
     ("affiche version 4.pdf", 4), ("affiche_final.psd", None), ("IMG_3381.jpg", None),
     ("scan0042.pdf", None), ("Facture_F2026-118.pdf", None), ("Planning_site_v2.xlsx", 2),
+    ("2026_03_likassi_regis_2026_03_25T08_57_09.pdf", None),  # fin d'une heure, pas une version
+    ("releve_2026_03.pdf", None), ("photo 2026-10-12.jpg", None),
 ])
 def test_extract_version(name, expected):
     assert extract_version(name) == expected

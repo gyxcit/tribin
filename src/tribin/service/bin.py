@@ -10,7 +10,7 @@ from pathlib import Path
 from tribin.config import STAGING_DIRNAME, Settings, is_within, read_api_key
 from tribin.convention.loader import Convention, ConventionError, load_convention
 from tribin.db import Database
-from tribin.engine.context import make_context
+from tribin.engine.context import folder_signature, make_context
 from tribin.engine.proposer import ProposeContext, has_placeholder, propose
 from tribin.extract import extract
 from tribin.fs.filters import ExclusionMatcher, NotProcessable, check_processable
@@ -98,7 +98,7 @@ class BinService:
         self.db = db or Database(settings.db_path)
         self.queue = QueueStore(self.db)
         self._provider_factory = provider_factory
-        self._contexts: dict[str, ProposeContext] = {}
+        self._contexts: dict[str, tuple[tuple, ProposeContext]] = {}  # racine -> (signature des dossiers, contexte)
         self._convention: tuple[str, float, Convention] | None = None
         self._lock = threading.RLock()
 
@@ -164,16 +164,21 @@ class BinService:
         return roots[0]
 
     def context(self, root: Path) -> ProposeContext:
+        """Contexte de la racine, reconstruit dès que ses dossiers changent (nouveau dossier, fichier rangé à la
+        main…) : la carte des dossiers et les fichiers semblables restent à jour sans « Réanalyser »."""
         key = str(Path(root).resolve())
+        signature = folder_signature(Path(root))
         with self._lock:
-            if key not in self._contexts:
+            cached = self._contexts.get(key)
+            if cached is None or cached[0] != signature:
                 settings = self.ai_settings()
                 try:
                     llm = self._provider_factory(settings, self.config.model or None)
                 except LLMError as exc:
                     llm = _NoLLM(str(exc), settings.model)
-                self._contexts[key] = make_context(Path(root), self.convention(), llm, self.settings, self.db)
-            return self._contexts[key]
+                cached = (signature, make_context(Path(root), self.convention(), llm, self.settings, self.db))
+                self._contexts[key] = cached
+            return cached[1]
 
     # --- dépôt dans la corbeille --------------------------------------------------------------
 

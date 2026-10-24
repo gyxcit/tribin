@@ -112,14 +112,16 @@ def test_infer_convention(sandbox_dir: Path):
 
 def test_client_detection_is_precise(sandbox_dir: Path, expected):
     conv = load_convention(sandbox_dir / "convention.yaml")
+    codes = {c.code for c in conv.clients}
     found = wrong = 0
+    with_client = [r for r in expected if r["expected_folder"].split("/")[0] in codes]
     for row in expected:
         code = detect_client(extract(sandbox_dir / "inbox" / row["file"]), conv)
         if code:
             found += 1
-            wrong += code != row["expected_folder"].split("/")[0]
+            wrong += code != row["expected_folder"].split("/")[0]  # y compris : aucun client inventé hors gabarit
     assert wrong == 0
-    assert found >= 0.6 * len(expected)  # images sans texte : l'IA voit l'image
+    assert found >= 0.6 * len(with_client)  # images sans texte : l'IA voit l'image
 
 
 def test_candidates_contain_expected_folder(sandbox_dir: Path, expected):

@@ -23,6 +23,9 @@ class EvalRow:
     expected_name: str
     proposal: Proposal | None = None
     error: str = ""
+    # Codes de la convention : un dossier attendu hors gabarit (« Administratif/Banque ») n'a ni client ni catégorie
+    clients: frozenset[str] = frozenset()
+    categories: frozenset[str] = frozenset()
 
     @staticmethod
     def _norm(folder: str) -> str:
@@ -41,12 +44,14 @@ class EvalRow:
 
     @property
     def client_ok(self) -> bool:
-        expected = self.expected_folder.replace("\\", "/").split("/")[0]
+        first = self.expected_folder.replace("\\", "/").split("/")[0]
+        expected = first if not self.clients or first.casefold() in self.clients else ""
         return bool(self.proposal) and (self.proposal.fields.client or "").casefold() == expected.casefold()
 
     @property
     def category_ok(self) -> bool:
-        expected = self.expected_folder.replace("\\", "/").rstrip("/").split("/")[-1]
+        last = self.expected_folder.replace("\\", "/").rstrip("/").split("/")[-1]
+        expected = last if not self.categories or last.casefold() in self.categories else ""
         return bool(self.proposal) and (self.proposal.fields.category or "").casefold() == expected.casefold()
 
     @property
@@ -110,6 +115,10 @@ def run_eval(testset: Path, ctx_factory, workers: int = 4) -> EvalReport:
     convention = load_convention(testset / "convention.yaml")
     ctx: ProposeContext = ctx_factory(testset / "root", convention)
     rows = load_expected(testset)
+    clients = frozenset(c.code.casefold() for c in convention.clients)
+    categories = frozenset(code.casefold() for code in convention.category_codes())
+    for row in rows:
+        row.clients, row.categories = clients, categories
     started = time.monotonic()
 
     def work(row: EvalRow) -> None:

@@ -19,7 +19,15 @@ import yaml
 SCRIPTS_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPTS_DIR))
 
-from sandbox_data import CATEGORIES, CLIENTS, EXCLUDED_FILES, INBOX, PROJECTS, ROOT_FILES  # noqa: E402
+from sandbox_data import (  # noqa: E402
+    CATEGORIES,
+    CLIENTS,
+    EXCLUDED_FILES,
+    FREE_FOLDER_FILES,
+    INBOX,
+    PROJECTS,
+    ROOT_FILES,
+)
 from sandbox_files import write_file  # noqa: E402
 
 REPO_ROOT = SCRIPTS_DIR.parent
@@ -57,6 +65,7 @@ def _root_specs() -> list[tuple[str, dict]]:
                 kind = "pdf" if ext == ".pdf" else "image"
                 specs.append((f"{project_dir}/{cat}/{name}", {"kind": kind, "lines": lines, "mtime": date}))
     specs.extend(EXCLUDED_FILES)
+    specs.extend(FREE_FOLDER_FILES)
     return specs
 
 

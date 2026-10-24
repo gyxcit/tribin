@@ -143,3 +143,24 @@ def test_null_alternative_dropped_but_valid_choice_kept(sb):
 def test_ai_never_proposes_the_staging_folder(sb):
     p, _ = run(sb, fixed(target_folder="_TriBin/a_trier", description="CV", confidence=0.9))
     assert p.manual and p.target_folder == ""
+
+
+def test_files_with_same_name_pattern_point_to_their_folder(sb):
+    from tribin.engine.similar import PlacedFiles, name_pattern
+
+    assert name_pattern("2026_03_lefort_marie_2026_03_25T08_57_09.pdf") == name_pattern(
+        "2026_08_lefort_marie_2026_08_29T10_12_44.pdf")
+    placed = PlacedFiles(sb / "root")
+    found = placed.similar("2026_09_lefort_marie_2026_09_29T09_41_07.pdf")
+    assert [s.folder for s in found] == ["Administratif/Bulletins-de-paie"] and found[0].count == 1
+    assert placed.similar("IMG_3381.jpg") == []  # nom générique : aucun signal
+
+    llm = fixed(target_folder="Administratif/Bulletins-de-paie", description="Bulletin de paie", confidence=0.9)
+    ctx = ProposeContext(root=sb / "root", convention=load_convention(sb / "convention.yaml"), llm=llm)
+    ctx.similar_provider = lambda info: placed.similar(info.name)
+    p = propose(extract(sb / "inbox" / "2026_09_lefort_marie_2026_09_29T09_41_07.pdf"), ctx)
+    assert "Fichiers du même modèle de nom déjà rangés" in llm.prompts[0]
+    candidates = llm.prompts[0].split("## Dossiers candidats")[1].split("##")[0]
+    assert "- Administratif/Bulletins-de-paie" in candidates  # toujours proposé parmi les candidats
+    assert p.target_folder == "Administratif/Bulletins-de-paie" and not p.folder_is_new and p.confidence == 0.9
+    assert "_v" not in p.new_name  # l'heure du nom d'origine n'est pas une version

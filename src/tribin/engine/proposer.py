@@ -16,6 +16,7 @@ from tribin.convention.naming import build_name, clean_segment, extract_version,
 from tribin.convention.structure import fields_from_folder, folder_from_fields, matches_template
 from tribin.engine.candidates import Candidate, phase1_candidates
 from tribin.engine.prompts import PROMPT_VERSION, SYSTEM_PROMPT, PromptData, build_user_prompt, human_size
+from tribin.engine.similar import SimilarFolder
 from tribin.fs.filters import ExclusionMatcher
 from tribin.llm.base import LLMError, LLMProvider
 from tribin.models import Alternative, FileInfo, LLMProposal, NameFields, Proposal
@@ -40,6 +41,7 @@ class ProposeContext:
     examples_provider: Callable[[FileInfo, str | None], list[str]] | None = None
     version_detector: Callable[[FileInfo, Proposal, ProposeContext], None] | None = None
     rules_provider: Callable[[], list[str]] | None = None
+    similar_provider: Callable[[FileInfo], list[SimilarFolder]] | None = None
     project_folders: list[str] = field(default_factory=list)
     _phase1_cache: list[Candidate] | None = None
 
@@ -102,7 +104,7 @@ def _clients_text(convention: Convention, hint: str | None) -> str:
 
 
 def build_prompt_data(info: FileInfo, ctx: ProposeContext, hint: str | None, candidates: list[Candidate],
-                      examples: list[str]) -> PromptData:
+                      examples: list[str], similar: list[SimilarFolder] | None = None) -> PromptData:
     conv = ctx.convention
     return PromptData(
         structure_template=conv.structure.template,
@@ -122,6 +124,7 @@ def build_prompt_data(info: FileInfo, ctx: ProposeContext, hint: str | None, can
         candidate_folders=[c.render() for c in candidates],
         project_folders=ctx.project_folders,
         correction_examples=examples,
+        similar_files=[s.render() for s in similar or []],
         client_hint=hint or "",
         has_image=bool(info.images),
         extra_notes=[f"Métadonnées : {', '.join(f'{k}={v}' for k, v in info.metadata.items())}"] if info.metadata else [],
@@ -234,7 +237,15 @@ def propose(info: FileInfo, ctx: ProposeContext) -> Proposal:
     hint = ctx.client_detector(info) if ctx.client_detector else None
     candidates = ctx.candidates(info, hint)
     examples = ctx.examples_provider(info, hint) if ctx.examples_provider else []
-    data = build_prompt_data(info, ctx, hint, candidates, examples)
+    try:
+        similar = ctx.similar_provider(info) if ctx.similar_provider else []
+    except Exception:  # signal facultatif : jamais bloquant
+        log.exception("similar files lookup failed for %s", info.path)
+        similar = []
+    known = {c.rel.casefold() for c in candidates}
+    candidates = [*candidates, *(Candidate(s.folder, "contient des fichiers du même modèle de nom")
+                                 for s in similar if s.folder.casefold() not in known)]
+    data = build_prompt_data(info, ctx, hint, candidates, examples, similar)
     try:
         resp = ctx.llm.complete_json(SYSTEM_PROMPT, build_user_prompt(data), LLMProposal, images=info.images[:1] or None)
         proposal = finalize(info, resp, ctx)

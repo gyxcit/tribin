@@ -80,6 +80,18 @@ EXCLUDED_FILES = [
     ("VELOM/2026/2026-063_Site-Web/05_Sources/Rushes/clip_atelier_001.mp4", {"kind": "mp4"}),
 ]
 
+# Dossiers hors gabarit (administratif interne) où l'utilisateur range déjà des fichiers du même modèle de nom
+PAIE = "Administratif/Bulletins-de-paie"
+BANQUE = "Administratif/Banque"
+FREE_FOLDER_FILES = [
+    (f"{PAIE}/2026_08_lefort_marie_2026_08_29T10_12_44.pdf", {"kind": "pdf", "mtime": "2026-08-29", "lines": [
+        "BULLETIN DE PAIE", "Période : août 2026", "Salariée : Marie Lefort", "Employeur : Agence Exemple",
+        "Salaire net à payer : 2 104,37 EUR"]}),
+    (f"{BANQUE}/Releve_LCL_2026-08.pdf", {"kind": "pdf", "mtime": "2026-09-02", "lines": [
+        "LCL - Relevé de compte courant professionnel", "Titulaire : Agence Exemple",
+        "Période du 01/08/2026 au 31/08/2026", "Solde créditeur : 18 240,12 EUR"]}),
+]
+
 A25 = "ACME/2025/2025-018_Salon-Equip-Auto"
 A26 = "ACME/2026/2026-042_Campagne-Noel"
 B25 = "BRIOC/2025/2025-031_Packaging-Galette"
@@ -210,6 +222,12 @@ INBOX: list[tuple[str, dict, str, str, list[str]]] = [
         "## Atelier\nRéparation et entretien toutes marques.\n"}, f"{V26}/03_Execution", "", [f"{V26}/02_Creation"]),
     ("banniere_web_728x90.png", {"kind": "image", "mtime": "2026-09-02", "color": "#1b5e20", "size": (728, 90),
                                  "lines": ["Velos Martin - nouvelle boutique en ligne"]}, f"{V26}/03_Execution", "", [f"{V26}/04_Livrables"]),
+    ("2026_09_lefort_marie_2026_09_29T09_41_07.pdf", {"kind": "pdf", "mtime": "2026-09-29", "lines": [
+        "BULLETIN DE PAIE", "Période : septembre 2026", "Salariée : Marie Lefort", "Employeur : Agence Exemple",
+        "Salaire net à payer : 2 104,37 EUR"]}, PAIE, "", []),
+    ("Releve_LCL_2026-09.pdf", {"kind": "pdf", "mtime": "2026-10-02", "lines": [
+        "LCL - Relevé de compte courant professionnel", "Titulaire : Agence Exemple",
+        "Période du 01/09/2026 au 30/09/2026", "Solde créditeur : 16 902,55 EUR"]}, BANQUE, "", []),
     ("photo_equipe_velo.jpg", {"kind": "image", "mtime": "2026-07-03", "color": "#5d4037", "camera": "Sony A7 III", "taken": "2026-07-02",
                                "lines": ["Équipe atelier", "Vélos Martin"]}, f"{V26}/05_Sources", "", []),
 ]

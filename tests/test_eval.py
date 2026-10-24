@@ -22,7 +22,7 @@ def test_eval_with_oracle_scores_100_and_writes_nothing(sandbox_dir: Path, tmp_p
     report = run_eval(sb, lambda root, conv: ProposeContext(root=root, convention=conv, llm=llm))
     assert _snapshot(sb) == before  # phase 1 : aucune écriture
     m = report.metrics
-    assert m["fichiers"] == 40
+    assert m["fichiers"] == 42
     assert m["dossiers_exacts_pct"] == 100.0
     assert m["clients_corrects_pct"] == 100.0
     assert m["categories_correctes_pct"] == 100.0

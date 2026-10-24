@@ -196,3 +196,16 @@ def test_internal_staging_folder_is_never_a_destination(settings, sb):
         svc.prepare([Validation(item.file_id, "_TriBin", item.proposal.new_name, "edited")])
     svc.save_edits({item.file_id: {"name": "a.pdf", "folder": f"{NOEL}/01_Brief"}})
     assert service(settings, sb).load_edits()[item.file_id]["folder"] == f"{NOEL}/01_Brief"  # après redémarrage
+
+
+def test_folder_map_follows_new_folders(settings, sb):
+    svc = service(settings, sb)
+    first = svc.context(sb / "root")
+    assert svc.context(sb / "root") is first  # rien n'a changé : même contexte
+    (sb / "root" / "salaire").mkdir()
+    (sb / "root" / "salaire" / "2026_07_dupont_luc_2026_07_28T13_45_02.pdf").write_bytes(b"%PDF-1.4")
+    second = svc.context(sb / "root")
+    assert second is not first
+    assert [s.folder for s in second.similar_provider(type("I", (), {"name": "2026_09_dupont_luc_2026_09_01T08_00_00.pdf"})())] == ["salaire"]
+    svc.drop(sb / "inbox" / "notes.txt")  # un dépôt dans _TriBin ne reconstruit pas la carte
+    assert svc.context(sb / "root") is second
