@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import sys
 from dataclasses import replace
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt
@@ -33,6 +32,7 @@ from tribin.learning.corrections import team_rule_alerts
 from tribin.learning.rules_store import delete_rule, list_rules, update_rule
 from tribin.service.profile import PRIVACY_NOTICE, save_profile
 from tribin.ui import system_integration
+from tribin.ui.folder_picker import excluded_picker, roots_picker
 from tribin.ui.theme import header_bar
 
 if TYPE_CHECKING:
@@ -42,30 +42,6 @@ MODELS = {"anthropic": ["claude-haiku-5-5", "claude-sonnet-5-5"],
           "gemini": ["gemini-flash-latest", "gemini-flash-lite-latest", "gemini-pro-latest"],
           "mistral": ["mistral-medium-latest", "mistral-small-latest", "mistral-large-latest"]}
 PROVIDER_LABELS = {"anthropic": "Anthropic (Claude)", "gemini": "Google (Gemini)", "mistral": "Mistral AI"}
-
-
-def path_list(items: list[str]) -> tuple[QWidget, QListWidget]:
-    box = QWidget()
-    layout = QVBoxLayout(box)
-    layout.setContentsMargins(0, 0, 0, 0)
-    lst = QListWidget()
-    lst.addItems(items)
-    row = QHBoxLayout()
-    add, remove = QPushButton("Ajouter…"), QPushButton("Retirer")
-
-    def on_add() -> None:
-        folder = QFileDialog.getExistingDirectory(box, "Choisir un répertoire de référence")
-        if folder and not lst.findItems(folder, Qt.MatchFlag.MatchExactly):
-            lst.addItem(str(Path(folder)))
-
-    add.clicked.connect(on_add)
-    remove.clicked.connect(lambda: [lst.takeItem(lst.row(i)) for i in lst.selectedItems()])
-    row.addWidget(add)
-    row.addWidget(remove)
-    row.addStretch()
-    layout.addWidget(lst)
-    layout.addLayout(row)
-    return box, lst
 
 
 class SettingsDialog(QDialog):
@@ -80,11 +56,10 @@ class SettingsDialog(QDialog):
 
         general = QWidget()
         form = QFormLayout(general)
-        roots_box, self.roots = path_list(cfg.roots)
-        form.addRow("Répertoires de référence (racines)", roots_box)
-        self.excluded = QPlainTextEdit("\n".join(cfg.local_excluded))
-        self.excluded.setPlaceholderText("Un motif par ligne, relatif à la racine, ex. **/_PROJET_EN_COURS/**")
-        form.addRow("Zones exclues (en plus de la convention)", self.excluded)
+        self.roots = roots_picker(cfg.roots)
+        form.addRow("Dossiers à ranger", self.roots)
+        self.excluded = excluded_picker(cfg.local_excluded, self.roots.values)
+        form.addRow("Dossiers à ne jamais toucher", self.excluded)
         conv_row = QHBoxLayout()
         self.convention = QLineEdit(cfg.convention_path)
         browse = QPushButton("Parcourir…")
@@ -216,8 +191,8 @@ class SettingsDialog(QDialog):
     def _save(self) -> None:
         svc = self.c.service
         cfg = svc.config
-        cfg.roots = [self.roots.item(i).text() for i in range(self.roots.count())]
-        cfg.local_excluded = [line.strip() for line in self.excluded.toPlainText().splitlines() if line.strip()]
+        cfg.roots = self.roots.values()
+        cfg.local_excluded = self.excluded.values()
         cfg.convention_path = self.convention.text().strip()
         provider = self.provider.currentData()
         cfg.provider = provider

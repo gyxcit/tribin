@@ -205,7 +205,7 @@ def test_windows_are_constructible(qapp, controller):
     controller.bin_window.history.reload()
     windows = [SettingsDialog(controller), OnboardingWizard(controller)]
     controller.extra += windows
-    assert windows[0].roots.count() == 1
+    assert len(windows[0].roots.values()) == 1
     assert windows[1].pageIds()
 
 
@@ -265,3 +265,29 @@ def test_onboarding_simple_flow(qapp, controller, monkeypatch):
     assert controller.service.ai_settings().api_key == "cle-de-test"
     conv = Path(cfg.convention_path)
     assert conv.exists() and conv.parent == controller.service.settings.data_dir  # déduite des dossiers
+
+
+def test_folder_picker_one_by_one(qapp, tmp_path):
+    from tribin.ui.folder_picker import FolderPicker, excluded_label, excluded_picker, excluded_value
+
+    root = tmp_path / "Equipe"
+    (root / "ACME" / "_PROJET").mkdir(parents=True)
+    picker = FolderPicker([], "Ajouter un dossier", "Ajouter un autre dossier")
+    assert picker.add_button.text().endswith("Ajouter un dossier")
+    picker.add_value(str(root))
+    picker.add_value(str(root))  # pas de doublon
+    assert picker.values() == [str(root)]
+    assert picker.add_button.text().endswith("Ajouter un autre dossier")
+
+    assert excluded_value(root / "ACME" / "_PROJET", [str(root)]) == "ACME/_PROJET/**"
+    with pytest.raises(ValueError):
+        excluded_value(root, [str(root)])
+    with pytest.raises(ValueError):
+        excluded_value(tmp_path, [str(root)])
+    assert excluded_label("ACME/_PROJET/**") == "ACME/_PROJET"
+    assert excluded_label("**/_PROJET_EN_COURS/**") == "Tous les dossiers nommés « _PROJET_EN_COURS »"
+
+    excluded = excluded_picker(["ACME/_PROJET/**"], picker.values)
+    remove = next(b for b in excluded.findChildren(QPushButton) if b.text() == "Retirer")
+    remove.click()
+    assert excluded.values() == []

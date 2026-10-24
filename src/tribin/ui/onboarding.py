@@ -22,7 +22,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
-    QPlainTextEdit,
     QPushButton,
     QRadioButton,
     QVBoxLayout,
@@ -39,8 +38,9 @@ from tribin.mapping.infer import infer_convention
 from tribin.mapping.scanner import scan_root
 from tribin.service.profile import PRIVACY_NOTICE, QUESTIONS, build_profile, save_profile
 from tribin.ui.components import section
+from tribin.ui.folder_picker import excluded_picker, roots_picker
 from tribin.ui.icons import logo_pixmap
-from tribin.ui.settings import PROVIDER_LABELS, path_list
+from tribin.ui.settings import PROVIDER_LABELS
 
 if TYPE_CHECKING:
     from tribin.ui.app import AppController
@@ -159,9 +159,15 @@ class OnboardingWizard(QWizard):
         page.setSubTitle("Étape 2 sur 4 · Le dossier de l'équipe : sur ton ordinateur, sur le NAS ou dans Dropbox.")
         layout = QVBoxLayout(page)
         layout.setSpacing(10)
-        box, self.roots = path_list(self.c.service.config.roots)
-        self.roots.setMaximumHeight(90)
-        layout.addWidget(box)
+        layout.addWidget(section("Dossiers à ranger"))
+        self.roots = roots_picker(self.c.service.config.roots)
+        layout.addWidget(self.roots)
+
+        layout.addSpacing(6)
+        layout.addWidget(section("Dossiers à ne jamais toucher (facultatif)"))
+        self.excluded = excluded_picker(self.c.service.config.local_excluded, self._roots)
+        self.excluded.setToolTip("Par exemple un projet InDesign en cours : le déplacer casserait ses liens.")
+        layout.addWidget(self.excluded)
 
         layout.addSpacing(6)
         layout.addWidget(section("Convention de rangement"))
@@ -192,17 +198,6 @@ class OnboardingWizard(QWizard):
         layout.addWidget(hint)
         self.mode.buttonToggled.connect(lambda *_: self.file_box.setVisible(existing.isChecked()))
         self.file_box.setVisible(False)
-
-        layout.addSpacing(6)
-        advanced = QPushButton("Options avancées : dossiers à ne jamais toucher ▸")
-        advanced.setObjectName("Link")
-        layout.addWidget(advanced, 0, Qt.AlignmentFlag.AlignLeft)
-        self.excluded = QPlainTextEdit("**/_PROJET_EN_COURS/**")
-        self.excluded.setMaximumHeight(70)
-        self.excluded.setToolTip("Un motif par ligne, relatif au dossier. Exemple : **/_PROJET_EN_COURS/**")
-        self.excluded.setVisible(False)
-        advanced.clicked.connect(lambda: self.excluded.setVisible(not self.excluded.isVisible()))
-        layout.addWidget(self.excluded)
         layout.addStretch()
         return page
 
@@ -269,7 +264,7 @@ class OnboardingWizard(QWizard):
     # --- valeurs et fin ---------------------------------------------------------------------------
 
     def _roots(self) -> list[str]:
-        return [self.roots.item(i).text() for i in range(self.roots.count())]
+        return self.roots.values()
 
     def _browse(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "Fichier de convention", "", "YAML (*.yaml *.yml)")
@@ -311,7 +306,7 @@ class OnboardingWizard(QWizard):
         QApplication.restoreOverrideCursor()
         cfg = svc.config
         cfg.roots = roots
-        cfg.local_excluded = [line.strip() for line in self.excluded.toPlainText().splitlines() if line.strip()]
+        cfg.local_excluded = self.excluded.values()
         cfg.convention_path = str(convention_path)
         cfg.onboarding_done = True
         cfg.privacy_accepted = True

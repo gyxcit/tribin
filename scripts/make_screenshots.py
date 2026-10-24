@@ -66,7 +66,7 @@ def main() -> None:
     app_mod.is_being_written = lambda path, delay=2.0: False
     service = BinService(get_settings(), provider_factory=lambda s, m=None: FakeLLM(answer, model="demo"))
     service.update_config(AppConfig(roots=[str(sandbox / "root")], convention_path=str(sandbox / "convention.yaml"),
-                                    onboarding_done=True, privacy_accepted=True))
+                                    local_excluded=["**/_PROJET_EN_COURS/**"], onboarding_done=True, privacy_accepted=True))
     controller = app_mod.AppController(app, service, show_ui=False)
     names = ["scan0042.pdf", "Affiche_Noel_final.pdf", "affiche_noel_v2.psd", "IMG_3381.jpg",
              "Planning_site_v2.xlsx", "banniere_web_728x90.png", "devis_signe.pdf", "Document1.docx"]

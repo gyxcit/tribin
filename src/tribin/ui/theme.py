@@ -35,7 +35,6 @@ LEVEL_WAIT = ("wait", "Analyse…", "#ECEEF4", "#5B6080")
 MONO_FAMILIES = ["Cascadia Mono", "Consolas", "SF Mono", "Menlo", "JetBrains Mono", "monospace"]
 
 STYLESHEET = f"""
-* {{ color: {INK}; }}
 QMainWindow, QDialog, QWizard, QWizardPage {{ background: {BACKGROUND}; }}
 QToolTip {{ background: {NAVY}; color: white; border: none; padding: 6px 8px; border-radius: 4px; }}
 
@@ -90,8 +89,9 @@ QPushButton#AltButton {{ background: white; border: 1px solid #E0B866; color: #6
 
 QLineEdit, QPlainTextEdit, QComboBox, QDateEdit {{
     background: {SURFACE}; border: 1px solid {BORDER_STRONG}; border-radius: 8px; padding: 7px 10px;
-    selection-background-color: {NAVY};
 }}
+QLineEdit, QPlainTextEdit {{ selection-background-color: {NAVY}; }}
+QComboBox, QDateEdit {{ selection-background-color: {SELECTION}; selection-color: {INK}; }}
 QLineEdit:focus, QPlainTextEdit:focus, QComboBox:focus {{ border-color: {NAVY}; }}
 QLineEdit, QPlainTextEdit {{ selection-color: white; }}
 QComboBox QAbstractItemView {{ background: {SURFACE}; border: 1px solid {BORDER_STRONG}; outline: none; padding: 4px;
@@ -196,8 +196,8 @@ def apply_theme(app: QApplication) -> None:
     for role, color in [(QPalette.ColorRole.Window, BACKGROUND), (QPalette.ColorRole.Base, SURFACE),
                         (QPalette.ColorRole.AlternateBase, BACKGROUND), (QPalette.ColorRole.Text, INK),
                         (QPalette.ColorRole.WindowText, INK), (QPalette.ColorRole.Button, SURFACE),
-                        (QPalette.ColorRole.ButtonText, INK), (QPalette.ColorRole.Highlight, NAVY),
-                        (QPalette.ColorRole.HighlightedText, "#FFFFFF"), (QPalette.ColorRole.PlaceholderText, MUTED)]:
+                        (QPalette.ColorRole.ButtonText, INK), (QPalette.ColorRole.Highlight, SELECTION),
+                        (QPalette.ColorRole.HighlightedText, INK), (QPalette.ColorRole.PlaceholderText, MUTED)]:
         palette.setColor(role, QColor(color))
     app.setPalette(palette)
     font = QFont("Segoe UI" if sys.platform == "win32" else ".AppleSystemUIFont" if sys.platform == "darwin" else "")
