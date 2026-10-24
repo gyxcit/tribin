@@ -118,3 +118,23 @@ def test_duplicate_alternatives_dropped_and_real_one_caps_confidence(sb):
     assert [a.target_folder for a in p.alternatives] == [f"{NOEL}/01_Brief"]
     assert p.confidence == 0.55 and p.needs_review
     assert any("hésite" in w for w in p.warnings)
+
+
+@pytest.mark.parametrize("folder", ["null/CV/04_Livrables", "None/2026/Projet/01_Brief", "{client}/2026/x/01_Brief",
+                                    f"{NOEL.split('/')[0]}/inconnu/06_Admin"])
+def test_never_a_folder_named_null(sb, folder):
+    from tribin.models import LLMAlternative
+
+    p, _ = run(sb, fixed(target_folder=folder, client="null", project_code="null", description="CV ingénieur IA",
+                         confidence=0.45, alternatives=[LLMAlternative(target_folder="null/CV/02_Creation")]))
+    assert p.manual and p.target_folder == "" and not p.alternatives
+    assert "null" not in p.new_name.lower() and "Changer" in p.reasoning
+
+
+def test_null_alternative_dropped_but_valid_choice_kept(sb):
+    from tribin.models import LLMAlternative
+
+    p, _ = run(sb, fixed(target_folder=f"{NOEL}/06_Admin", client="ACME", project_code="null", description="Devis",
+                         confidence=0.9, alternatives=[LLMAlternative(target_folder="null/CV/06_Admin")]))
+    assert p.target_folder == f"{NOEL}/06_Admin" and not p.alternatives and p.confidence == 0.9
+    assert "null" not in p.new_name.lower()

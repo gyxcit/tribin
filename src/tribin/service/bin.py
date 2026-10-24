@@ -11,7 +11,7 @@ from tribin.config import STAGING_DIRNAME, Settings, is_within, read_api_key
 from tribin.convention.loader import Convention, ConventionError, load_convention
 from tribin.db import Database
 from tribin.engine.context import make_context
-from tribin.engine.proposer import ProposeContext, propose
+from tribin.engine.proposer import ProposeContext, has_placeholder, propose
 from tribin.extract import extract
 from tribin.fs.filters import ExclusionMatcher, NotProcessable, check_processable
 from tribin.ids import new_id
@@ -230,7 +230,8 @@ class BinService:
             if item.status != "analyzing" and not Path(item.staged_path).exists():
                 self.queue.set_status(item.file_id, "gone", "Le fichier n'est plus dans le dossier tampon.")
                 continue
-            if item.status == "error" or (item.status == "ready" and item.proposal and item.proposal.manual):
+            stale = bool(item.proposal and item.proposal.target_folder and has_placeholder(item.proposal.target_folder))
+            if item.status == "error" or (item.status == "ready" and item.proposal and (item.proposal.manual or stale)):
                 self.queue.set_status(item.file_id, "analyzing")
                 ids.append(item.file_id)
         return ids

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-PROMPT_VERSION = "p3"
+PROMPT_VERSION = "p4"
 
 SYSTEM_PROMPT = """Tu es l'assistant de rangement de fichiers d'une équipe. Ta mission : proposer
 le dossier où ranger un fichier et les éléments de son nouveau nom, en respectant
@@ -18,6 +18,10 @@ Règles :
   convention ; indique alors folder_is_new = true.
 - Le client doit être un code de la liste des clients. S'il est inconnu, mets
   client = null et explique-le dans reasoning.
+- target_folder ne contient JAMAIS « null », « None », « inconnu » ni un champ du
+  gabarit ({client}…). Si aucun dossier ne convient (client inconnu, fichier
+  personnel ou hors des projets), mets target_folder = "" et confidence < 0.3 :
+  un humain choisira.
 - N'invente aucune information absente du fichier. Si la date du document
   n'est pas identifiable, mets date = null.
 - description : 2 à 5 mots, précis et utiles pour retrouver le fichier

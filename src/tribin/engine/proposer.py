@@ -51,6 +51,24 @@ class ProposeContext:
         return self._phase1_cache
 
 
+# Valeurs « vides » que l'IA écrit parfois en toutes lettres : jamais un nom de dossier ni un élément du nom.
+PLACEHOLDERS = {"null", "none", "nil", "undefined", "nan", "unknown", "inconnu", "inconnue"}
+
+
+def is_placeholder(value: str | None) -> bool:
+    """Vrai pour « null », « None », « inconnu », « {client} », « <projet> »…"""
+    text = (value or "").strip().strip("\"'«» ").casefold()
+    return not text or text in PLACEHOLDERS or any(c in text for c in "{}<>")
+
+
+def has_placeholder(folder: str) -> bool:
+    return any(is_placeholder(part) for part in folder.split("/"))
+
+
+def _real(value: str | None) -> str | None:
+    return None if value is None or is_placeholder(value) else value
+
+
 def normalize_rel(folder: str | None) -> str | None:
     """Chemin relatif propre ("A/B/C"), ou None s'il est absolu ou remonte avec « .. »."""
     if not folder:
@@ -129,16 +147,17 @@ def _existing_names(folder: Path) -> set[str]:
 
 def _make_fields(resp: LLMProposal, folder: str, info: FileInfo, conv: Convention, warnings: list[str]) -> NameFields:
     from_folder = fields_from_folder(folder, conv) if folder else {}
-    client = conv.client_by_code(resp.client)
-    if resp.client and not client:
-        warnings.append(f"Client inconnu : « {resp.client} » n'est pas dans la liste des clients.")
+    client_text = _real(resp.client)
+    client = conv.client_by_code(client_text)
+    if client_text and not client:
+        warnings.append(f"Client inconnu : « {client_text} » n'est pas dans la liste des clients.")
     category = resp.category if resp.category in conv.category_codes() else None
-    description = resp.description.strip() or split_extension(info.name)[0]
+    description = (_real(resp.description) or "").strip() or split_extension(info.name)[0]
     return NameFields(
-        date=_parse_date(resp.date),
+        date=_parse_date(_real(resp.date)),
         client=from_folder.get("client") or (client.code if client else None),
-        project_code=from_folder.get("project_code") or resp.project_code,
-        project_name=from_folder.get("project_name") or resp.project_name,
+        project_code=from_folder.get("project_code") or _real(resp.project_code),
+        project_name=from_folder.get("project_name") or _real(resp.project_name),
         category=from_folder.get("category") or category,
         description=description,
         version=extract_version(info.name),
@@ -153,11 +172,14 @@ def finalize(info: FileInfo, resp: LLMProposal, ctx: ProposeContext) -> Proposal
     if folder is None:
         warnings.append("Dossier proposé hors de la racine : ignoré.")
         folder = ""
+    if folder and has_placeholder(folder):  # « null/CV/04_Livrables » : client inconnu écrit en toutes lettres
+        folder = ""
     fields = _make_fields(resp, folder, info, conv, warnings)
     if not folder:
         folder = folder_from_fields(fields, conv, fallback_date=info.modified.date())
-    if not folder:
-        return manual_proposal(info, ctx, "l'IA n'a pas pu déterminer de dossier.")
+    if not folder or has_placeholder(folder):
+        return manual_proposal(info, ctx, "l'IA n'a pas trouvé de dossier valable (client ou projet inconnu) : "
+                                          "choisissez-le avec « Changer… ».")
     abs_folder = root / folder
     if not is_within(abs_folder, root):
         return manual_proposal(info, ctx, "le dossier proposé sort de la racine.")
@@ -182,8 +204,9 @@ def finalize(info: FileInfo, resp: LLMProposal, ctx: ProposeContext) -> Proposal
     seen = {folder.casefold()}
     for alt in resp.alternatives:
         alt_folder = normalize_rel(alt.target_folder)
-        if not alt_folder or alt_folder.casefold() in seen or ExclusionMatcher(conv.excluded_paths).matches_rel(alt_folder):
-            continue  # alternative vide, identique au premier choix ou en zone exclue
+        if (not alt_folder or alt_folder.casefold() in seen or has_placeholder(alt_folder)
+                or ExclusionMatcher(conv.excluded_paths).matches_rel(alt_folder)):
+            continue  # alternative vide, avec « null », identique au premier choix ou en zone exclue
         seen.add(alt_folder.casefold())
         if len(alternatives) == 2:
             break
