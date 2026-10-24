@@ -844,7 +844,7 @@ Indicateur principal en usage réel : **taux de propositions acceptées sans mod
 *À mettre à jour par l'agent à la fin de chaque tâche.*
 
 - [x] Phase 0 — Mise en place
-- [ ] Phase 1 — Proposition en ligne de commande, sans déplacement
+- [x] Phase 1 — Proposition en ligne de commande, sans déplacement (score réel à mesurer avec une clé API)
 - [ ] Phase 2 — Convention et cartographie
 - [ ] Phase 3 — Exécution sécurisée, journal, annulation
 - [ ] Phase 4 — Application de bureau « Corbeille »
@@ -856,6 +856,7 @@ Indicateur principal en usage réel : **taux de propositions acceptées sans mod
 | Date | Phase | Ce qui a été fait | Score d'évaluation | Prochaine étape |
 |------|-------|-------------------|--------------------|-----------------|
 | 2026-10-24 | 0 | Dépôt, pyproject (uv, Python 3.12), config + garde-fou sandbox, make_sandbox (6 projets, 43 fichiers rangés, 40 à ranger, expected.csv), pytest, CI macOS/Windows | — | Phase 1 |
+| 2026-10-24 | 1 | extract/, llm/ (Anthropic, sortie structurée), convention/ (loader, naming, structure), engine/ (prompt p1, proposer), CLI propose / propose-dir / eval ; tests avec IA simulée (100 % avec l'oracle, aucune écriture) | non mesuré (pas de clé API) | Phase 2 |
 
 ---
 
