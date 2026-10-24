@@ -12,13 +12,14 @@ log = logging.getLogger("tribin")
 
 
 def build_parser() -> argparse.ArgumentParser:
-    from tribin.cli import map_cmd, propose_cmd
+    from tribin.cli import file_cmd, map_cmd, propose_cmd
 
     parser = argparse.ArgumentParser(prog="tribin", description="TriBin : rangement de fichiers assisté par IA.")
     parser.add_argument("--version", action="version", version=f"TriBin {__version__}")
     sub = parser.add_subparsers(dest="command", metavar="<commande>")
     propose_cmd.register(sub)
     map_cmd.register(sub)
+    file_cmd.register(sub)
     return parser
 
 

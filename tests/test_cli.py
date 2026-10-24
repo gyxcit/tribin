@@ -70,3 +70,42 @@ def test_eval_command(env, monkeypatch, capsys, tmp_path):
     out = capsys.readouterr().out
     assert "Dossiers exacts" in out and "100.0" in out
     assert list((tmp_path / "eval_results").glob("*.csv"))
+
+
+def test_file_history_undo_create_structure(env, monkeypatch, capsys):
+    import tribin.cli.propose_cmd as pc
+    from fakes import fixed
+
+    noel = "ACME/2026/2026-042_Campagne-Noel"
+    monkeypatch.setattr(pc, "make_provider", lambda settings, model=None: fixed(
+        target_folder=f"{noel}/06_Admin", date="2026-10-12", description="Devis impression", confidence=0.9))
+    src = env / "inbox" / "scan0042.pdf"
+    conv = env / "convention.yaml"
+    assert main(["file", str(src), "--root", str(env / "root"), "--convention", str(conv), "--yes"]) == 0
+    target = env / "root" / noel / "06_Admin" / "2026-10-12_ACME_2026-042_Devis-impression.pdf"
+    assert target.exists() and not src.exists()
+    assert main(["history"]) == 0
+    out = capsys.readouterr().out
+    assert "move" in out and "100%" in out
+    from tribin.safety.journal import Journal
+
+    batch = next(op["batch_id"] for op in Journal(get_settings().journal_dir).operations() if op["action"] == "move")
+    assert main(["undo", "--batch", batch, "--yes"]) == 0
+    assert src.exists() and not target.exists()
+
+    assert main(["create-structure", "--root", str(env / "root"), "--convention", str(conv), "--client", "VELOM",
+                 "--year", "2027", "--project", "2027-001_Salon-Velo", "--yes"]) == 0
+    assert (env / "root" / "VELOM" / "2027" / "2027-001_Salon-Velo" / "06_Admin").is_dir()
+
+
+def test_file_refuses_outside_sandbox(env, monkeypatch, tmp_path, capsys):
+    import tribin.cli.propose_cmd as pc
+    from fakes import fixed
+
+    monkeypatch.setattr(pc, "make_provider", lambda settings, model=None: fixed(target_folder="A", description="x"))
+    real_root = tmp_path / "vrai"
+    (real_root / "A").mkdir(parents=True)
+    src = tmp_path / "vrai.pdf"
+    src.write_text("x")
+    code = main(["file", str(src), "--root", str(real_root), "--convention", str(env / "convention.yaml"), "--yes"])
+    assert code == 1 and src.exists()

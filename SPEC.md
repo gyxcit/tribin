@@ -846,7 +846,7 @@ Indicateur principal en usage réel : **taux de propositions acceptées sans mod
 - [x] Phase 0 — Mise en place
 - [x] Phase 1 — Proposition en ligne de commande, sans déplacement (score réel à mesurer avec une clé API)
 - [x] Phase 2 — Convention et cartographie
-- [ ] Phase 3 — Exécution sécurisée, journal, annulation
+- [x] Phase 3 — Exécution sécurisée, journal, annulation
 - [ ] Phase 4 — Application de bureau « Corbeille »
 - [ ] Phase 5 — Apprentissage
 - [ ] Phase 6 — Versions
@@ -858,6 +858,7 @@ Indicateur principal en usage réel : **taux de propositions acceptées sans mod
 | 2026-10-24 | 0 | Dépôt, pyproject (uv, Python 3.12), config + garde-fou sandbox, make_sandbox (6 projets, 43 fichiers rangés, 40 à ranger, expected.csv), pytest, CI macOS/Windows | — | Phase 1 |
 | 2026-10-24 | 1 | extract/, llm/ (Anthropic, sortie structurée), convention/ (loader, naming, structure), engine/ (prompt p1, proposer), CLI propose / propose-dir / eval ; tests avec IA simulée (100 % avec l'oracle, aucune écriture) | non mesuré (pas de clé API) | Phase 2 |
 | 2026-10-24 | 2 | db.py (SQLite), mapping/ (scanner < 1 s sur la sandbox, motifs de nommage, descriptions IA par lots de 30, convention déduite, structure de zéro), détection du client, présélection des 15 dossiers (rapidfuzz), CLI map / import-clients / init-structure | non mesuré (pas de clé API) ; dossier attendu présent dans les candidats ≥ 80 % | Phase 3 |
+| 2026-10-24 | 3 | safety/ (executor plan/simulate/execute/undo, journal JSONL fsync, restore.py autonome stdlib, copie inter-volumes .tribin-partial + SHA-256), CLI file / history / undo / create-structure ; tous les tests obligatoires de la phase 3 | — | Phase 4 |
 
 ---
 
