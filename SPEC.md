@@ -849,7 +849,7 @@ Indicateur principal en usage réel : **taux de propositions acceptées sans mod
 *À mettre à jour par l'agent à la fin de chaque tâche.*
 
 - [x] Phase 0 — Mise en place
-- [x] Phase 1 — Proposition en ligne de commande, sans déplacement (score mesuré en jouant l'IA : 100 % ; à confirmer avec l'API)
+- [x] Phase 1 — Proposition en ligne de commande, sans déplacement (score réel avec Mistral via l'API : 90 % de dossiers acceptables, objectif 70 % atteint)
 - [x] Phase 2 — Convention et cartographie
 - [x] Phase 3 — Exécution sécurisée, journal, annulation
 - [x] Phase 4 — Application de bureau « Corbeille » (test de fumée de l'appli empaquetée OK en CI sur macOS et Windows ; dépôt à la souris sur le Dock à vérifier à la main sur un Mac)
@@ -871,6 +871,7 @@ Indicateur principal en usage réel : **taux de propositions acceptées sans mod
 | 2026-10-24 | 1 (mesure) | Sans clé API : prompts réels de la sandbox exportés, réponses rédigées par Claude Opus 5.5 (session de développement) puis rejouées dans `tribin eval`. Prompt p1 : 97,5 % de dossiers acceptables (90 % exacts), 100 % de clients. Défauts trouvés et corrigés : dossiers intermédiaires vides parmi les candidats, aucun bon candidat quand le client n'est pas détecté → prompt p2 (liste des projets existants). Prompt p2 : 100 % acceptables, 92,5 % exacts, 100 % de clients, 0 % de noms exacts (description formulée différemment). Réserves : ce n'est pas le modèle configuré (Haiku via l'API), et l'auteur du corrigé est le même que celui des réponses | 100 % (p2, IA jouée) | Confirmer avec `tribin eval` et une vraie clé |
 | 2026-10-24 | 5.4 | Second fournisseur d'IA : Google Gemini (`TRIBIN_PROVIDER=gemini`, `GEMINI_API_KEY`, SDK google-genai en option `--extra gemini`), choix du fournisseur dans les Réglages, workflow eval avec choix du fournisseur. Clé Gemini de l'utilisateur valide (46 modèles accessibles) mais crédits prépayés épuisés (erreur 402) : éval réelle impossible tant que le compte n'est pas rechargé | — | Recharger les crédits Gemini puis lancer `tribin eval sandbox/ --min-score 70` |
 | 2026-10-24 | 5.4 | Troisième fournisseur d'IA : Mistral AI (`TRIBIN_PROVIDER=mistral`, `MISTRAL_API_KEY`, SDK mistralai en option `--extra mistral`, modèle par défaut mistral-small-latest), choix dans les Réglages et dans le workflow eval | — | Ajouter la clé Mistral puis lancer l'éval |
+| 2026-10-24 | 1 (mesure réelle) | `tribin eval sandbox/ --min-score 70` avec Mistral `mistral-small-latest` via l'API, prompt p2 : **90 % de dossiers acceptables**, 70 % exacts, 100 % de clients, 72,5 % de catégories, ~2,1 s par fichier. Les 4 erreurs portent toutes sur la catégorie (client et projet justes). Confiance mal calibrée : 0,97 sur les bonnes réponses, 0,94 sur les mauvaises → le marqueur « à vérifier » se déclenche rarement | 90 % (Mistral, réel) | Améliorer la calibration de la confiance ; comparer avec mistral-medium-latest / Haiku |
 
 ---
 
