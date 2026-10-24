@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QButtonGroup,
     QFrame,
@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 
 from tribin.service.queue import QueueItem
 from tribin.ui.components import FileBadge, KeyButton, Pill, elided, item_level, status_label
+from tribin.ui.icons import line_icon
 
 GROUPS = (("check", "À vérifier"), ("wait", "Analyse en cours"), ("ready", "Prêts à ranger"))
 TABS = (("all", "Tous"), ("check", "À vérifier"), ("ready", "Prêts"), ("aside", "Mis de côté"))
@@ -101,8 +102,10 @@ class QueuePanel(QFrame):
         top.setSpacing(2)
         title = QLabel("À ranger")
         title.setObjectName("Title")
-        self.refresh_button = QPushButton("⟳  Actualiser")
+        self.refresh_button = QPushButton("Actualiser")
         self.refresh_button.setObjectName("Ghost")
+        self.refresh_button.setIcon(line_icon("refresh"))
+        self.refresh_button.setIconSize(QSize(16, 16))
         self.refresh_button.setToolTip("Relit la clé API et les réglages, relance les analyses restées sans IA (F5)")
         self.refresh_button.clicked.connect(self.refresh_clicked)
         title_row = QHBoxLayout()

@@ -425,3 +425,27 @@ def test_set_aside_button(qapp, controller):
     win.detail.skip_button.click()
     assert [i.file_id for i in controller.service.pending()] == [item.file_id]
     assert not win.queue.tab_buttons["aside"].isVisibleTo(win.queue)
+
+
+def test_manual_edits_survive_restart_and_no_duplicate_message(qapp, controller, settings):
+    from tribin.llm.base import LLMError
+
+    def no_key(settings, model=None):
+        raise LLMError("Clé API manquante")
+
+    controller.service._provider_factory = no_key
+    controller.service.reload()
+    controller.drop_paths([controller.sb / "inbox" / "scan0042.pdf"])
+    assert wait(qapp, lambda: any(i.status == "ready" for i in controller.service.pending()))
+    controller.refresh_queue()
+    win = controller.bin_window
+    assert not win.detail.warnings.isVisibleTo(win.detail)  # la raison n'est pas répétée en avertissement
+    win.detail.set_folder(f"{NOEL}/06_Admin")
+    win.detail.name.setText("devis.pdf")
+    item = controller.service.pending()[0]
+    other = app_mod.AppController(qapp, BinService(settings, provider_factory=no_key), show_ui=False)
+    controller.extra += [other.bin_window, other.drop_widget, other.tray]
+    other.refresh_queue()
+    other.bin_window.select_file(item.file_id)
+    assert other.bin_window.detail.folder == f"{NOEL}/06_Admin"
+    assert other.bin_window.detail.name.text() == "devis.pdf"

@@ -188,7 +188,13 @@ class AppController:
                 self.bin_window.statusBar().showMessage(
                     f"{len([o for o in result.done if o.action == 'move'])} fichier(s) rangé(s) — annulable depuis l'Historique.", 8000)
 
-        self._run(self.service.prepare, validations, on_done=prepared)
+        self._run(self.service.prepare, validations, on_done=prepared, on_error=self._validation_failed)
+
+    def _validation_failed(self, message: str) -> None:
+        """Rangement refusé : message bien visible (et pas seulement dans la barre d'état)."""
+        self.error(message)
+        if self.bin_window.isVisible():
+            QMessageBox.warning(self.bin_window, "Rangement impossible", message)
 
     def return_to_origin(self, file_id: str) -> None:
         def done(message: str) -> None:

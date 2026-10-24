@@ -6,7 +6,7 @@ from __future__ import annotations
 import html
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QUrl, Signal
+from PySide6.QtCore import QSize, Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QComboBox,
@@ -35,6 +35,7 @@ from tribin.ui.components import (
     section,
     thumbnail,
 )
+from tribin.ui.icons import line_icon
 from tribin.ui.theme import mono_font
 
 HESITATION = "L'IA hésite avec"
@@ -106,15 +107,18 @@ class DetailPanel(QFrame):
         tools = QHBoxLayout()
         tools.setContentsMargins(0, 6, 0, 0)
         tools.setSpacing(4)
-        self.reanalyze_button = QPushButton("⟳  Réanalyser")
+        self.reanalyze_button = QPushButton("Réanalyser")
         self.reanalyze_button.setToolTip("Demander une nouvelle proposition à l'IA pour ce fichier")
         self.reanalyze_button.clicked.connect(self.reanalyze_clicked)
         self.open_button = QPushButton("Ouvrir")
         self.open_button.clicked.connect(self._open_file)
         self.reveal_button = QPushButton("Afficher dans le dossier")
         self.reveal_button.clicked.connect(self._reveal_file)
-        for button in (self.reanalyze_button, self.open_button, self.reveal_button):
+        for button, icon in ((self.reanalyze_button, "sparkle"), (self.open_button, "open"),
+                             (self.reveal_button, "folder")):
             button.setObjectName("Small")
+            button.setIcon(line_icon(icon, "#1F2544", 15))
+            button.setIconSize(QSize(15, 15))
             tools.addWidget(button)
         tools.addStretch()
         titles.addLayout(tools)
@@ -228,13 +232,13 @@ class DetailPanel(QFrame):
         bar = QHBoxLayout(actions)
         bar.setContentsMargins(20, 12, 28, 12)
         bar.setSpacing(8)
-        self.return_button = KeyButton("Renvoyer à l'origine", "R", "Ghost")
+        self.return_button = KeyButton("Renvoyer à l'origine", "R", "Ghost", icon="undo")
         self.return_button.clicked.connect(self.return_clicked)
-        self.skip_button = KeyButton("Mettre de côté", "Échap")
+        self.skip_button = KeyButton("Mettre de côté", "Échap", icon="pause")
         self.skip_button.setToolTip("Retire le fichier de la liste « À ranger » sans le déplacer ; "
                                     "il reste dans l'onglet « Mis de côté ».")
         self.skip_button.clicked.connect(self.skip_clicked)
-        self.validate_button = KeyButton("Ranger ici", "Entrée", "Primary")
+        self.validate_button = KeyButton("Ranger ici", "Entrée", "Primary", icon="check")
         self.validate_button.clicked.connect(self.validate_clicked)
         bar.addWidget(self.return_button)
         bar.addStretch()
@@ -339,7 +343,9 @@ class DetailPanel(QFrame):
                 self.reasoning.setText(item.error or "Erreur pendant l'analyse.")
             else:
                 self.reasoning.setText(p.reasoning if p and p.reasoning else "—")
-            others = [w for w in (p.warnings if p else []) if not w.startswith((HESITATION, NEW_VERSION))]
+            shown = self.reasoning.text()
+            others = [w for w in (p.warnings if p else [])
+                      if not w.startswith((HESITATION, NEW_VERSION)) and w not in shown]  # pas deux fois le même message
             if item.error and item.status == "ready":
                 others.append(item.error)
             self.warnings.setText("\n".join(f"⚠ {w}" for w in others))

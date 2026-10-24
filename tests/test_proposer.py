@@ -138,3 +138,8 @@ def test_null_alternative_dropped_but_valid_choice_kept(sb):
                          confidence=0.9, alternatives=[LLMAlternative(target_folder="null/CV/06_Admin")]))
     assert p.target_folder == f"{NOEL}/06_Admin" and not p.alternatives and p.confidence == 0.9
     assert "null" not in p.new_name.lower()
+
+
+def test_ai_never_proposes_the_staging_folder(sb):
+    p, _ = run(sb, fixed(target_folder="_TriBin/a_trier", description="CV", confidence=0.9))
+    assert p.manual and p.target_folder == ""

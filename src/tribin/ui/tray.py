@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QMenu, QSystemTrayIcon
 
-from tribin.ui.icons import app_icon
+from tribin.ui.icons import app_icon, line_icon
 
 if TYPE_CHECKING:
     from tribin.ui.app import AppController
@@ -18,9 +18,10 @@ class Tray(QSystemTrayIcon):
         super().__init__(app_icon())
         self.c = controller
         menu = QMenu()
-        for label, slot in [("Fichiers à ranger", controller.show_bin), ("Historique", controller.show_history),
-                            ("Réglages", controller.show_settings)]:
-            action = QAction(label, menu)
+        for label, slot, icon in [("Fichiers à ranger", controller.show_bin, "inbox"),
+                                  ("Historique", controller.show_history, "history"),
+                                  ("Réglages", controller.show_settings, "settings")]:
+            action = QAction(line_icon(icon), label, menu)
             action.triggered.connect(slot)
             menu.addAction(action)
         self.toggle_widget = QAction("Afficher le widget de dépôt", menu, checkable=True, checked=True)

@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path, PurePosixPath
 
-from tribin.config import is_within
+from tribin.config import STAGING_DIRNAME, is_within
 from tribin.convention.loader import Convention
 from tribin.convention.naming import build_name, clean_segment, extract_version, fit_to_path, split_extension, unique_name
 from tribin.convention.structure import fields_from_folder, folder_from_fields, matches_template
@@ -172,8 +172,8 @@ def finalize(info: FileInfo, resp: LLMProposal, ctx: ProposeContext) -> Proposal
     if folder is None:
         warnings.append("Dossier proposé hors de la racine : ignoré.")
         folder = ""
-    if folder and has_placeholder(folder):  # « null/CV/04_Livrables » : client inconnu écrit en toutes lettres
-        folder = ""
+    if folder and (has_placeholder(folder) or folder.split("/")[0].casefold() == STAGING_DIRNAME.casefold()):
+        folder = ""  # « null/CV/04_Livrables » (client inconnu écrit en toutes lettres) ou dossier interne _TriBin
     fields = _make_fields(resp, folder, info, conv, warnings)
     if not folder:
         folder = folder_from_fields(fields, conv, fallback_date=info.modified.date())

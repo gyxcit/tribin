@@ -62,6 +62,12 @@ class Prepared:
         return len(self.validations) > 1 or any(op.action == "mkdir" for op in self.batch.ops)
 
 
+def is_internal_folder(folder: str) -> bool:
+    """Vrai pour « _TriBin » et ses sous-dossiers (dossier tampon) : jamais une destination de rangement."""
+    first = folder.replace("\\", "/").strip("/").split("/", 1)[0]
+    return first.casefold() == STAGING_DIRNAME.casefold()
+
+
 AUTO_MIN_CONFIDENCE = 0.8  # rangement automatique (réglage) : seulement les propositions « sûres »
 READY_MIN_CONFIDENCE = 0.6  # bouton du widget : tous les fichiers « prêts » (sous ce seuil : « à vérifier »)
 
@@ -236,6 +242,14 @@ class BinService:
                 ids.append(item.file_id)
         return ids
 
+    # --- modifications en cours (nom, dossier choisis à la main), conservées après un redémarrage ---
+
+    def load_edits(self) -> dict[str, dict]:
+        return dict(self.db.get_setting("queue_edits", {}) or {})
+
+    def save_edits(self, edits: dict[str, dict]) -> None:
+        self.db.set_setting("queue_edits", edits)
+
     # --- mis de côté ---------------------------------------------------------------------------
 
     def set_aside(self, file_id: str) -> None:
@@ -285,6 +299,8 @@ class BinService:
         executor = self.executor()
         batch = executor.batch()
         for v in validations:
+            if is_internal_folder(v.target_folder):
+                raise BinError(f"« {STAGING_DIRNAME} » est le dossier interne de TriBin : choisissez un autre dossier.")
             item = self.queue.get(v.file_id)
             if item is None or not item.proposal:
                 raise BinError("Proposition introuvable pour ce fichier.")

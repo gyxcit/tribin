@@ -256,13 +256,21 @@ class ApiKeyField(QWidget):
 class KeyButton(QPushButton):
     """Bouton « Ranger ici  [Entrée] » : libellé et touche de raccourci affichée."""
 
-    def __init__(self, text: str, key: str = "", kind: str = ""):
+    def __init__(self, text: str, key: str = "", kind: str = "", icon: str = ""):
         super().__init__()
         if kind:
             self.setObjectName(kind)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(14, 0, 10, 0)
         layout.setSpacing(8)
+        if icon:
+            from tribin.ui.icons import line_icon
+
+            color = {"Primary": "#FFFFFF", "Ghost": "#3A4063"}.get(kind, "#1F2544")
+            glyph = QLabel()
+            glyph.setPixmap(line_icon(icon, color, 16).pixmap(16, 16))
+            glyph.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+            layout.addWidget(glyph)
         self.label = QLabel(text)
         self.label.setObjectName("BtnText")
         self.label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)

@@ -7,7 +7,7 @@ import sys
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import Qt, QUrl
+from PySide6.QtCore import QSize, Qt, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QButtonGroup,
@@ -39,6 +39,7 @@ from tribin.service.profile import PRIVACY_NOTICE, save_profile
 from tribin.ui import system_integration
 from tribin.ui.components import ApiKeyField, ChoiceCard, divider, muted, section
 from tribin.ui.folder_picker import excluded_picker, roots_picker
+from tribin.ui.icons import line_icon
 from tribin.ui.onboarding import PROVIDERS
 
 if TYPE_CHECKING:
@@ -47,8 +48,8 @@ if TYPE_CHECKING:
 MODELS = {"anthropic": ["claude-haiku-5-5", "claude-sonnet-5-5"],
           "gemini": ["gemini-flash-latest", "gemini-flash-lite-latest", "gemini-pro-latest"],
           "mistral": ["mistral-medium-latest", "mistral-small-latest", "mistral-large-latest"]}
-PAGES = (("folders", "Dossiers"), ("ai", "Intelligence artificielle"), ("learning", "Apprentissage"),
-         ("system", "Système"))
+PAGES = (("folders", "Dossiers", "folder"), ("ai", "Intelligence artificielle", "sparkle"),
+         ("learning", "Apprentissage", "brain"), ("system", "Système", "monitor"))
 
 
 class SettingsPage(QScrollArea):
@@ -132,9 +133,11 @@ class SettingsDialog(QDialog):
         title.setContentsMargins(10, 0, 0, 14)
         nav_col.addWidget(title)
         self.nav = QButtonGroup(self)
-        for index, (_, label) in enumerate(PAGES):
+        for index, (_, label, icon) in enumerate(PAGES):
             button = QPushButton(label)
             button.setObjectName("NavItem")
+            button.setIcon(line_icon(icon))
+            button.setIconSize(QSize(18, 18))
             button.setCheckable(True)
             button.clicked.connect(lambda _=False, i=index: self.pages.setCurrentIndex(i))
             self.nav.addButton(button, index)

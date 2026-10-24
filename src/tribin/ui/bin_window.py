@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QDragEnterEvent, QDropEvent, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from tribin.config import is_within
+from tribin.config import STAGING_DIRNAME, is_within
 from tribin.convention.naming import is_valid_name
 from tribin.engine.proposer import normalize_rel
 from tribin.service.bin import Validation
@@ -31,7 +31,7 @@ from tribin.service.queue import QueueItem
 from tribin.ui.bin_detail import DetailPanel
 from tribin.ui.components import divider
 from tribin.ui.drop_widget import dropped_paths
-from tribin.ui.icons import app_icon, logo_pixmap
+from tribin.ui.icons import app_icon, line_icon, logo_pixmap
 from tribin.ui.queue_panel import QueuePanel
 
 if TYPE_CHECKING:
@@ -40,9 +40,11 @@ if TYPE_CHECKING:
 PROVIDER_NAMES = {"anthropic": "Claude", "gemini": "Gemini", "mistral": "Mistral"}
 
 
-def nav_item(text: str, checkable: bool = False) -> QPushButton:
+def nav_item(text: str, icon: str, checkable: bool = False) -> QPushButton:
     button = QPushButton(text)
     button.setObjectName("NavItem")
+    button.setIcon(line_icon(icon))
+    button.setIconSize(QSize(18, 18))
     button.setCheckable(checkable)
     button.setCursor(Qt.CursorShape.PointingHandCursor)
     return button
@@ -54,7 +56,8 @@ class BinWindow(QMainWindow):
         self.c = controller
         self.items: list[QueueItem] = []
         self.aside: list[QueueItem] = []  # mis de côté
-        self._edits: dict[str, dict] = {}  # file_id -> {"name", "folder", "alt"} modifiés par l'utilisateur
+        # file_id -> {"name", "folder", "alt"} modifiés par l'utilisateur ; enregistrés (survivent au redémarrage)
+        self._edits: dict[str, dict] = controller.service.load_edits()
         self.setWindowTitle("TriBin")
         self.setWindowIcon(app_icon())
         self.setAcceptDrops(True)
@@ -105,8 +108,8 @@ class BinWindow(QMainWindow):
         col.addLayout(brand_row)
         self.nav = QButtonGroup(self)
         self.nav_buttons: dict[str, QPushButton] = {}
-        for key, label in (("bin", "À ranger"), ("history", "Historique")):
-            button = nav_item(label, checkable=True)
+        for key, label, icon in (("bin", "À ranger", "inbox"), ("history", "Historique", "history")):
+            button = nav_item(label, icon, checkable=True)
             button.clicked.connect(lambda _=False, k=key: self.show_page(k))
             self.nav.addButton(button)
             self.nav_buttons[key] = button
@@ -121,7 +124,7 @@ class BinWindow(QMainWindow):
         col.addStretch()
         col.addWidget(divider())
         col.addSpacing(8)
-        settings = nav_item("Réglages")
+        settings = nav_item("Réglages", "settings")
         settings.clicked.connect(self.c.show_settings)
         col.addWidget(settings)
         self.ai_chip = QLabel()
@@ -194,7 +197,10 @@ class BinWindow(QMainWindow):
         self.items = items
         self.aside = aside or []
         known = {i.file_id for i in [*items, *self.aside]}
-        self._edits = {k: v for k, v in self._edits.items() if k in known}
+        kept = {k: v for k, v in self._edits.items() if k in known}
+        if kept != self._edits:
+            self._edits = kept
+            self._save_edits()
         self.pending_count.setText(str(len(items)) if items else "")
         self._update_ai_chip()
         self.bin_pages.setCurrentIndex(1 if items or self.aside else 0)
@@ -212,6 +218,12 @@ class BinWindow(QMainWindow):
         color = "#14B8A6" if ok else "#F0605A"
         self.ai_chip.setText(f'<span style="color:{color}">●</span>&nbsp; {text}')
         self.ai_chip.setToolTip(tip)
+
+    def _save_edits(self) -> None:
+        try:
+            self.c.service.save_edits(self._edits)
+        except Exception:  # base indisponible : les modifications restent au moins pour cette session
+            pass
 
     def current_item(self) -> QueueItem | None:
         file_id = self.queue.current_file_id()
@@ -240,6 +252,7 @@ class BinWindow(QMainWindow):
         if item:
             self._edits.setdefault(item.file_id, {}).update(name=self.detail.name.text().strip(),
                                                            folder=self.detail.folder)
+            self._save_edits()
 
     def _apply_alternative(self, index: int) -> None:
         item = self.current_item()
@@ -247,6 +260,7 @@ class BinWindow(QMainWindow):
             return
         alt = item.proposal.alternatives[index]
         self._edits[item.file_id] = {"name": alt.new_name, "folder": alt.target_folder, "alt": index}
+        self._save_edits()
         self.detail.show_item(item, alt.new_name, alt.target_folder, categories=self._categories())
 
     # --- actions ------------------------------------------------------------------------------
@@ -313,6 +327,10 @@ class BinWindow(QMainWindow):
         if not is_within(Path(chosen), root):
             QMessageBox.warning(self, "Hors racine", f"Choisissez un dossier à l'intérieur de {root}.")
             return
+        if is_within(Path(chosen), root / STAGING_DIRNAME):
+            QMessageBox.warning(self, "Dossier interne", f"« {STAGING_DIRNAME} » est le dossier interne de TriBin "
+                                "(fichiers en attente) : choisissez un autre dossier.")
+            return
         self.detail.set_folder(Path(chosen).resolve().relative_to(root.resolve()).as_posix())
 
     def choose_alternative(self) -> None:
@@ -336,6 +354,7 @@ class BinWindow(QMainWindow):
         item = self.current_item()
         if item:
             self._edits.pop(item.file_id, None)  # la nouvelle proposition remplace les modifications en cours
+            self._save_edits()
             self.c.reanalyze(item.file_id)
 
     def return_selected(self) -> None:

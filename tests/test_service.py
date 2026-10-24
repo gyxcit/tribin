@@ -187,3 +187,12 @@ def test_set_aside_and_resume(settings, sb):
     assert not svc.auto_file().done  # jamais rangé automatiquement
     assert svc.resume(item.file_id) == "ready"
     assert [i.file_id for i in svc.pending()] == [item.file_id] and svc.set_aside_items() == []
+
+
+def test_internal_staging_folder_is_never_a_destination(settings, sb):
+    svc = service(settings, sb)
+    item = svc.analyze(svc.drop(sb / "inbox" / "scan0042.pdf").file_id)
+    with pytest.raises(BinError, match="dossier interne"):
+        svc.prepare([Validation(item.file_id, "_TriBin", item.proposal.new_name, "edited")])
+    svc.save_edits({item.file_id: {"name": "a.pdf", "folder": f"{NOEL}/01_Brief"}})
+    assert service(settings, sb).load_edits()[item.file_id]["folder"] == f"{NOEL}/01_Brief"  # après redémarrage
