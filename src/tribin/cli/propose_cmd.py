@@ -101,6 +101,10 @@ def cmd_eval(args: argparse.Namespace) -> int:
         console.print(detail)
     path = save_report(report, REPO_ROOT / "eval_results")
     console.print(f"Rapport enregistré : {path}")
+    score = report.metrics["dossiers_acceptables_pct"]
+    if args.min_score is not None and score < args.min_score:
+        console.print(f"[red]Objectif non atteint : {score} % de dossiers corrects (minimum {args.min_score} %).[/red]")
+        return 2
     return 0
 
 
@@ -124,4 +128,5 @@ def register(sub: argparse._SubParsersAction) -> None:
     p.add_argument("testset", type=Path)
     p.add_argument("--model")
     p.add_argument("-v", "--verbose", action="store_true", help="détailler les erreurs")
+    p.add_argument("--min-score", type=float, help="échouer si moins de N %% de dossiers corrects (ex. 70)")
     p.set_defaults(func=cmd_eval)

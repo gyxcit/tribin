@@ -66,7 +66,7 @@ def test_eval_command(env, monkeypatch, capsys, tmp_path):
 
     monkeypatch.setattr(pc, "make_provider", lambda settings, model=None: oracle(env))
     monkeypatch.setattr(pc, "REPO_ROOT", tmp_path)
-    assert main(["eval", str(env)]) == 0
+    assert main(["eval", str(env), "--min-score", "70"]) == 0
     out = capsys.readouterr().out
     assert "Dossiers exacts" in out and "100.0" in out
     assert list((tmp_path / "eval_results").glob("*.csv"))
@@ -109,3 +109,12 @@ def test_file_refuses_outside_sandbox(env, monkeypatch, tmp_path, capsys):
     src.write_text("x")
     code = main(["file", str(src), "--root", str(real_root), "--convention", str(env / "convention.yaml"), "--yes"])
     assert code == 1 and src.exists()
+
+
+def test_eval_min_score_fails_below_target(env, monkeypatch, tmp_path):
+    import tribin.cli.propose_cmd as pc
+    from fakes import fixed
+
+    monkeypatch.setattr(pc, "make_provider", lambda settings, model=None: fixed(target_folder="ACME", description="x"))
+    monkeypatch.setattr(pc, "REPO_ROOT", tmp_path)
+    assert main(["eval", str(env), "--min-score", "70"]) == 2
