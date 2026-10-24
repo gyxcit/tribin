@@ -15,7 +15,7 @@ from tribin.convention.loader import Convention
 from tribin.convention.naming import build_name, clean_segment, extract_version, fit_to_path, split_extension, unique_name
 from tribin.convention.structure import fields_from_folder, folder_from_fields, matches_template
 from tribin.engine.candidates import Candidate, phase1_candidates
-from tribin.engine.prompts import PROMPT_VERSION, SYSTEM_PROMPT, PromptData, build_user_prompt, human_size
+from tribin.engine.prompts import PromptData, build_user_prompt, human_size, prompt_version, system_prompt
 from tribin.engine.similar import SimilarFolder
 from tribin.fs.filters import ExclusionMatcher
 from tribin.llm.base import LLMError, LLMProvider
@@ -128,6 +128,7 @@ def build_prompt_data(info: FileInfo, ctx: ProposeContext, hint: str | None, can
         client_hint=hint or "",
         has_image=bool(info.images),
         extra_notes=[f"Métadonnées : {', '.join(f'{k}={v}' for k, v in info.metadata.items())}"] if info.metadata else [],
+        personal=conv.personal,
     )
 
 
@@ -137,7 +138,7 @@ def manual_proposal(info: FileInfo, ctx: ProposeContext, reason: str) -> Proposa
     return Proposal(
         file_id=info.file_id, source_path=info.path, target_folder="", new_name=info.name,
         fields=NameFields(description=stem), confidence=0.0, reasoning=f"À traiter manuellement : {reason}",
-        warnings=[reason], prompt_version=PROMPT_VERSION, model=ctx.llm.model, manual=True,
+        warnings=[reason], prompt_version=prompt_version(ctx.convention.personal), model=ctx.llm.model, manual=True,
     )
 
 
@@ -154,7 +155,7 @@ def _make_fields(resp: LLMProposal, folder: str, info: FileInfo, conv: Conventio
     client = conv.client_by_code(client_text)
     if client_text and not client:
         warnings.append(f"Client inconnu : « {client_text} » n'est pas dans la liste des clients.")
-    category = resp.category if resp.category in conv.category_codes() else None
+    category = conv.find_category(_real(resp.category))
     description = (_real(resp.description) or "").strip() or split_extension(info.name)[0]
     return NameFields(
         date=_parse_date(_real(resp.date)),
@@ -165,6 +166,20 @@ def _make_fields(resp: LLMProposal, folder: str, info: FileInfo, conv: Conventio
         description=description,
         version=extract_version(info.name),
     )
+
+
+MAX_CATEGORY_LENGTH = 30
+
+
+def new_category_for(resp: LLMProposal, conv: Convention) -> str | None:
+    """Mode personnel : catégorie proposée par l'IA et absente de la liste -> nom de la catégorie à créer."""
+    name = _real(resp.category)
+    if not conv.personal or not name or conv.find_category(name):
+        return None
+    code = clean_segment(name.replace("/", " "), conv.naming).replace(conv.naming.separator, conv.naming.word_separator)
+    if not code or is_placeholder(code) or len(code) > MAX_CATEGORY_LENGTH or code.startswith("_"):
+        return None
+    return code[:1].upper() + code[1:]
 
 
 def finalize(info: FileInfo, resp: LLMProposal, ctx: ProposeContext) -> Proposal:
@@ -178,6 +193,10 @@ def finalize(info: FileInfo, resp: LLMProposal, ctx: ProposeContext) -> Proposal
     if folder and (has_placeholder(folder) or folder.split("/")[0].casefold() == STAGING_DIRNAME.casefold()):
         folder = ""  # « null/CV/04_Livrables » (client inconnu écrit en toutes lettres) ou dossier interne _TriBin
     fields = _make_fields(resp, folder, info, conv, warnings)
+    new_category = new_category_for(resp, conv)
+    if new_category:  # mode personnel : catégorie à créer ; le chemin suit le gabarit (catégorie / année)
+        fields.category = new_category
+        folder = folder_from_fields(fields, conv, fallback_date=info.modified.date())
     if not folder:
         folder = folder_from_fields(fields, conv, fallback_date=info.modified.date())
     if not folder or has_placeholder(folder):
@@ -190,7 +209,9 @@ def finalize(info: FileInfo, resp: LLMProposal, ctx: ProposeContext) -> Proposal
         return manual_proposal(info, ctx, "le dossier proposé est dans une zone exclue.")
     confidence = max(0.0, min(1.0, float(resp.confidence)))
     folder_is_new = not abs_folder.is_dir()
-    if folder_is_new:
+    if folder_is_new and new_category:
+        warnings.append(f"Nouvelle catégorie « {new_category} » : le dossier {folder} sera créé.")
+    elif folder_is_new:
         warnings.append(f"Création de dossier : {folder}")
         if not matches_template(folder, conv):
             warnings.append("Le dossier proposé ne suit pas le gabarit de la convention.")
@@ -227,7 +248,8 @@ def finalize(info: FileInfo, resp: LLMProposal, ctx: ProposeContext) -> Proposal
     return Proposal(
         file_id=info.file_id, source_path=info.path, target_folder=folder, folder_is_new=folder_is_new,
         new_name=final_name, fields=fields, confidence=confidence, reasoning=resp.reasoning.strip(),
-        alternatives=alternatives, warnings=warnings, prompt_version=PROMPT_VERSION, model=ctx.llm.model,
+        alternatives=alternatives, warnings=warnings, prompt_version=prompt_version(conv.personal), model=ctx.llm.model,
+        new_category=new_category,
     )
 
 
@@ -247,7 +269,8 @@ def propose(info: FileInfo, ctx: ProposeContext) -> Proposal:
                                  for s in similar if s.folder.casefold() not in known)]
     data = build_prompt_data(info, ctx, hint, candidates, examples, similar)
     try:
-        resp = ctx.llm.complete_json(SYSTEM_PROMPT, build_user_prompt(data), LLMProposal, images=info.images[:1] or None)
+        resp = ctx.llm.complete_json(system_prompt(ctx.convention.personal), build_user_prompt(data), LLMProposal,
+                                     images=info.images[:1] or None)
         proposal = finalize(info, resp, ctx)
     except LLMError as exc:
         proposal = manual_proposal(info, ctx, str(exc))

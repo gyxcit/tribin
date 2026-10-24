@@ -10,6 +10,7 @@ from pathlib import Path
 from tribin.config import STAGING_DIRNAME, Settings, is_within, read_api_key
 from tribin.convention.loader import Convention, ConventionError, load_convention
 from tribin.db import Database
+from tribin.convention.structure import matches_template
 from tribin.engine.context import folder_signature, make_context
 from tribin.engine.proposer import ProposeContext, has_placeholder, propose
 from tribin.extract import extract
@@ -23,6 +24,7 @@ from tribin.safety import restore
 from tribin.safety.executor import ExecutionReport, Executor, SimulationReport
 from tribin.safety.operations import Batch, Choice
 from tribin.service.config_store import AppConfig, load_config, save_config
+from tribin.service.conventions import add_category
 from tribin.service.queue import ACTIVE, SKIPPED, QueueItem, QueueStore
 
 log = logging.getLogger(__name__)
@@ -55,11 +57,15 @@ class Prepared:
     batch: Batch
     report: SimulationReport
     validations: list[Validation]
+    # Mode personnel : dossiers conformes au gabarit (« Sante/2026 », nouvelle catégorie comprise), créés sans
+    # demander (choix de l'utilisateur) ; toujours journalisés et annulables.
+    new_category_folders: frozenset[Path] = frozenset()
 
     @property
     def needs_confirmation(self) -> bool:
         """Plus d'un fichier ou création de dossiers : la simulation DOIT être montrée à l'utilisateur."""
-        return len(self.validations) > 1 or any(op.action == "mkdir" for op in self.batch.ops)
+        return len(self.validations) > 1 or any(op.action == "mkdir" and op.destination not in self.new_category_folders
+                                                for op in self.batch.ops)
 
 
 def is_internal_folder(folder: str) -> bool:
@@ -303,6 +309,7 @@ class BinService:
         """Planifie et simule le rangement ; la simulation est journalisée (« simulated »)."""
         executor = self.executor()
         batch = executor.batch()
+        trusted: set[Path] = set()
         for v in validations:
             if is_internal_folder(v.target_folder):
                 raise BinError(f"« {STAGING_DIRNAME} » est le dossier interne de TriBin : choisissez un autre dossier.")
@@ -317,7 +324,12 @@ class BinService:
             }
             archive_older_versions(batch, p, Path(item.root), v.target_folder, self.convention(), v.file_id)
             batch.move(Choice(Path(item.staged_path), Path(item.root), v.target_folder, v.new_name, meta))
-        return Prepared(batch, executor.simulate(batch.ops), validations)
+            convention = self.convention()
+            if convention.personal and ((p.new_category and v.target_folder.split("/")[0] == p.new_category)
+                                        or matches_template(v.target_folder, convention)):
+                parts = v.target_folder.split("/")
+                trusted |= {Path(item.root).joinpath(*parts[:i]) for i in range(1, len(parts) + 1)}
+        return Prepared(batch, executor.simulate(batch.ops), validations, frozenset(trusted))
 
     def commit(self, prepared: Prepared) -> ExecutionReport:
         """Exécute un lot préparé ; met à jour la file d'attente et l'apprentissage."""
@@ -328,6 +340,7 @@ class BinService:
             op = by_file.get(v.file_id)
             if op and op.status == "done":
                 self.queue.set_status(v.file_id, "done")
+                self._remember_new_category(v)
                 self._after_placement(v, op)
             else:
                 self.queue.set_status(v.file_id, "ready", op.error if op else "Opération introuvable.")
@@ -373,6 +386,21 @@ class BinService:
                     report.left.append((item, (after.error if after else None) or "rangement impossible"))
         log.info("auto_file: %d rangé(s), %d laissé(s)", len(report.done), len(report.left))
         return report
+
+    def _remember_new_category(self, v: Validation) -> None:
+        """Mode personnel : une catégorie créée pour ce fichier rejoint la liste de la convention."""
+        item = self.queue.get(v.file_id)
+        category = item.proposal.new_category if item and item.proposal else None
+        if not category or v.target_folder.split("/")[0] != category:
+            return
+        try:
+            if self.convention().personal and add_category(Path(self.config.convention_path), category):
+                log.info("nouvelle catégorie ajoutée à la convention : %s", category)
+                with self._lock:
+                    self._convention = None
+                    self._contexts.clear()
+        except Exception:
+            log.exception("ajout de la catégorie %s impossible", category)
 
     def _after_placement(self, v: Validation, op) -> None:
         """Apprentissage : enregistre la décision, mémorise l'emplacement (signal implicite), résume les règles."""

@@ -61,6 +61,7 @@ class Proposal(BaseModel):
     prompt_version: str
     model: str
     manual: bool = False  # True : échec de l'IA, « à traiter manuellement »
+    new_category: str | None = None  # mode personnel : catégorie créée pour ce fichier (dossier à créer)
     client_hint: str | None = None
     excerpt: str = ""  # début du contenu extrait (apprentissage)
     older_versions: list[str] = Field(default_factory=list)  # versions précédentes à ranger dans _versions/

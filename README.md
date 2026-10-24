@@ -27,9 +27,18 @@ possibilités. Les actions sont en bas : « Ranger ici » (Entrée), « Passer �
 |---|---|---|
 | ![Au repos](docs/screenshots/widget-repos.png) | ![Analyse](docs/screenshots/widget-analyse.png) | ![Prêt](docs/screenshots/widget-pret.png) |
 
-**Premier lancement**, en quatre étapes listées à gauche : bienvenue, dossiers à ranger et à ne jamais toucher
-(choisis un par un ; la convention est déduite automatiquement), quelques questions facultatives, choix de l'IA
+**Premier lancement**, en cinq étapes listées à gauche : bienvenue, utilisation (personnel ou travail), dossiers
+à ranger et à ne jamais toucher (choisis un par un), quelques questions facultatives (mode travail), choix de l'IA
 (Mistral, Claude ou Gemini).
+
+**Deux modes**, au choix (et modifiable dans Réglages › Dossiers) :
+
+- **Personnel** : papiers, factures, bulletins de paie, photos… rangés par **catégorie puis par année**
+  (`Sante/2026`, `Banque/2026`). Les dossiers déjà présents (ex. `salaire`) deviennent des catégories. Si aucune
+  catégorie ne convient, TriBin **en crée une** (ex. `Voyages`) et l'ajoute à la liste, y compris en rangement
+  automatique ; tout reste annulable depuis l'Historique.
+- **Travail** : les fichiers d'une équipe, par client / année / projet / catégorie selon la convention partagée ;
+  TriBin n'invente jamais de catégorie et demande toujours avant de créer un dossier.
 
 | 1. Bienvenue | 2. Vos dossiers |
 |---|---|

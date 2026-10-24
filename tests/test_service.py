@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 from pathlib import Path
 
@@ -204,8 +205,52 @@ def test_folder_map_follows_new_folders(settings, sb):
     assert svc.context(sb / "root") is first  # rien n'a changé : même contexte
     (sb / "root" / "salaire").mkdir()
     (sb / "root" / "salaire" / "2026_07_dupont_luc_2026_07_28T13_45_02.pdf").write_bytes(b"%PDF-1.4")
+    os.utime(sb / "root" / "salaire", (1_700_000_000, 1_700_000_000))  # Windows met parfois cette date à jour en différé
     second = svc.context(sb / "root")
     assert second is not first
     assert [s.folder for s in second.similar_provider(type("I", (), {"name": "2026_09_dupont_luc_2026_09_01T08_00_00.pdf"})())] == ["salaire"]
     svc.drop(sb / "inbox" / "notes.txt")  # un dépôt dans _TriBin ne reconstruit pas la carte
     assert svc.context(sb / "root") is second
+
+
+def personal_service(settings, sb, llm):
+    from tribin.service.conventions import create_convention
+
+    path, _ = create_convention("personal", [str(sb / "root")], settings.data_dir)
+    svc = BinService(settings, provider_factory=lambda s, m=None: llm)
+    svc.update_config(AppConfig(roots=[str(sb / "root")], convention_path=str(path), onboarding_done=True,
+                                privacy_accepted=True, auto_file=True))
+    return svc, path
+
+
+def test_personal_mode_creates_missing_category(settings, sb):
+    from tribin.convention.loader import load_convention
+
+    llm = fixed(category="Animaux", target_folder="null", date="2026-10-12", description="Vaccin chat",
+                confidence=0.9)
+    svc, path = personal_service(settings, sb, llm)
+    item = svc.analyze(svc.drop(sb / "inbox" / "scan0042.pdf").file_id)
+    p = item.proposal
+    assert p.new_category == "Animaux" and p.target_folder == "Animaux/2026" and p.folder_is_new
+    assert p.new_name == "2026-10-12_Vaccin-chat.pdf" and p.confidence == 0.9
+    assert any("Nouvelle catégorie « Animaux »" in w for w in p.warnings)
+    report = svc.auto_file()  # création du dossier de la nouvelle catégorie : sans demander (mode personnel)
+    assert [i.file_id for i in report.done] == [item.file_id]
+    assert (sb / "root" / "Animaux" / "2026" / "2026-10-12_Vaccin-chat.pdf").exists()
+    assert "Animaux" in load_convention(path).category_codes()  # ajoutée à la liste
+    assert "Mode : personnel" in llm.prompts[0] and "Clients" not in llm.prompts[0]
+
+
+def test_personal_mode_uses_existing_category_and_work_mode_never_invents(settings, sb):
+    llm = fixed(category="Santé", target_folder="Sante/2026", date="2026-10-12", description="Ordonnance",
+                confidence=0.9)
+    svc, _ = personal_service(settings, sb, llm)
+    item = svc.analyze(svc.drop(sb / "inbox" / "scan0042.pdf").file_id)
+    assert item.proposal.new_category is None and item.proposal.target_folder == "Sante/2026"
+    # catégorie existante, dossier de l'année à créer : conforme au gabarit -> rangé sans demander
+    assert [i.file_id for i in svc.auto_file().done] == [item.file_id]
+    assert (sb / "root" / "Sante" / "2026").is_dir()
+
+    work = service(settings, sb, llm=fixed(category="Animaux", target_folder="ACME/2027/X/Animaux", confidence=0.9))
+    other = work.analyze(work.drop(sb / "inbox" / "BC_4512.pdf").file_id)
+    assert other.proposal.new_category is None  # mode travail : jamais de catégorie inventée

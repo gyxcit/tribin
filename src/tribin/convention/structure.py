@@ -36,7 +36,8 @@ def folder_from_fields(fields: NameFields, convention: Convention, fallback_date
         "project": project_folder_name(fields, convention),
         "category": fields.category or "",
     }
-    if any(not v for v in values.values()):
+    needed = {name for _, name, _, _ in string.Formatter().parse(convention.structure.template) if name}
+    if any(not values[n] for n in needed):  # seulement les éléments du gabarit (mode personnel : catégorie, année)
         return ""
     return convention.structure.template.format(**values)
 

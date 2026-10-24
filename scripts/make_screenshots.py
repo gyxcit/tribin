@@ -126,7 +126,7 @@ def main() -> None:
     wizard.resize(820, 640)
     save(wizard, "onboarding.png")
     wizard.accept_privacy.setChecked(True)
-    for step in range(2, 5):
+    for step in range(2, 6):
         wizard.next()
         save(wizard, f"onboarding-{step}.png")
     window.refresh([])

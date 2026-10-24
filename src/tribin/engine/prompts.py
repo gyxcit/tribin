@@ -46,6 +46,29 @@ Règles :
   confidence à 0.55 au plus.
 - Réponds UNIQUEMENT avec un objet JSON valide, sans aucun texte autour."""
 
+PERSONAL_RULES = """
+
+Mode personnel (papiers et fichiers d'une personne, pas d'une agence) :
+- Il n'y a ni client ni projet : client, project_code et project_name = null.
+- Choisis la catégorie la plus adaptée dans la liste (le nom du dossier existant
+  compte : « salaire » pour un bulletin de paie s'il existe).
+- Si AUCUNE catégorie ne convient vraiment, crée-en une : category = nom court
+  en français, 1 ou 2 mots, sans accent (ex. « Animaux », « Voyages »). N'en
+  crée pas si une catégorie existante convient, même approximativement.
+- target_folder suit le gabarit (catégorie puis année du document).
+- confidence : 0.85 à 0.95 si la nature du document correspond clairement à une
+  catégorie (existante ou créée) ; 0.6 à 0.8 si deux catégories sont plausibles ;
+  moins de 0.6 si tu ne comprends pas le document."""
+
+
+def system_prompt(personal: bool) -> str:
+    return SYSTEM_PROMPT + (PERSONAL_RULES if personal else "")
+
+
+def prompt_version(personal: bool) -> str:
+    return f"{PROMPT_VERSION}-perso" if personal else PROMPT_VERSION
+
+
 RESPONSE_FORMAT = """{
   "client": "CODE ou null",
   "project_code": "texte ou null",
@@ -90,6 +113,7 @@ class PromptData:
     client_hint: str = ""
     has_image: bool = False
     extra_notes: list[str] = field(default_factory=list)
+    personal: bool = False
 
 
 def _section(title: str, body: str) -> str:
@@ -102,8 +126,12 @@ def _bullets(items: list[str]) -> str:
 
 def build_user_prompt(d: PromptData) -> str:
     """Assemble le message utilisateur ; une section vide est omise."""
-    convention = (f"Structure : {d.structure_template}\nFormat des projets : {d.project_format}\n"
-                  f"Catégories : {d.categories_with_descriptions}\nClients (code : nom, alias) : {d.clients_list}")
+    if d.personal:
+        convention = (f"Mode : personnel (ni client ni projet)\nStructure : {d.structure_template}\n"
+                      f"Catégories : {d.categories_with_descriptions}")
+    else:
+        convention = (f"Structure : {d.structure_template}\nFormat des projets : {d.project_format}\n"
+                      f"Catégories : {d.categories_with_descriptions}\nClients (code : nom, alias) : {d.clients_list}")
     file_block = (
         f"Nom d'origine : {d.original_name}\n"
         f"Type : {d.extension or '(sans extension)'} — {d.mime} — {d.size_human}\n"

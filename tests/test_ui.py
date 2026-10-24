@@ -253,7 +253,7 @@ def test_onboarding_simple_flow(qapp, controller, monkeypatch):
     monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: None)
     wizard = onboarding.OnboardingWizard(controller)
     controller.extra.append(wizard)
-    assert len(wizard.pageIds()) == 4
+    assert len(wizard.pageIds()) == 5
     secteur = wizard.chips["secteur"]
     agence, studio = secteur.group.buttons()[:2]
     agence.click()
@@ -449,3 +449,30 @@ def test_manual_edits_survive_restart_and_no_duplicate_message(qapp, controller,
     other.bin_window.select_file(item.file_id)
     assert other.bin_window.detail.folder == f"{NOEL}/06_Admin"
     assert other.bin_window.detail.name.text() == "devis.pdf"
+
+
+def test_personal_mode_in_onboarding_and_settings(qapp, controller, monkeypatch):
+    from tribin.ui import onboarding
+    from tribin.ui.settings import SettingsDialog
+
+    monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: None)
+    monkeypatch.setattr(onboarding, "save_api_key", lambda key, provider: None)
+    wizard = onboarding.OnboardingWizard(controller)
+    controller.extra.append(wizard)
+    assert wizard.mode() == "work"  # convention d'agence de la sandbox
+    wizard.set_mode("personal")
+    ids = wizard.pageIds()
+    wizard.setStartId(ids[2])
+    wizard.restart()
+    assert wizard.nextId() == ids[4]  # « Votre activité » sautée en mode personnel
+    assert not wizard.convention_box.isVisibleTo(wizard)
+    wizard.accept()
+    conv = controller.service.convention()
+    assert conv.personal and "Salaires" in conv.category_codes() and "ACME" in conv.category_codes()
+
+    dialog = SettingsDialog(controller)
+    controller.extra.append(dialog)
+    assert dialog.mode() == "personal"
+    dialog.mode_cards["work"].radio.setChecked(True)
+    dialog._save()
+    assert not controller.service.convention().personal

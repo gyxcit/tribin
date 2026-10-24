@@ -35,12 +35,13 @@ from tribin.config import save_api_key
 from tribin.learning.corrections import team_rule_alerts
 from tribin.learning.rules_store import delete_rule, list_rules, update_rule
 from tribin.service.bin import AUTO_MIN_CONFIDENCE
+from tribin.service.conventions import create_convention, current_mode
 from tribin.service.profile import PRIVACY_NOTICE, save_profile
 from tribin.ui import system_integration
 from tribin.ui.components import ApiKeyField, ChoiceCard, divider, muted, section
 from tribin.ui.folder_picker import excluded_picker, roots_picker
 from tribin.ui.icons import line_icon
-from tribin.ui.onboarding import PROVIDERS
+from tribin.ui.onboarding import MODE_CHOICES, PROVIDERS
 
 if TYPE_CHECKING:
     from tribin.ui.app import AppController
@@ -175,6 +176,19 @@ class SettingsDialog(QDialog):
     def _folders_page(self) -> SettingsPage:
         cfg = self.c.service.config
         page = SettingsPage("Dossiers", "Où TriBin range les fichiers, et selon quelle convention.")
+        self.initial_mode = current_mode(self.c.service)
+        self.mode_group = QButtonGroup(self)
+        self.mode_cards: dict[str, ChoiceCard] = {}
+        cards = []
+        for key, title, description in MODE_CHOICES:
+            card = ChoiceCard(title, description)
+            card.radio.setProperty("mode", key)
+            self.mode_group.addButton(card.radio)
+            self.mode_cards[key] = card
+            cards.append(card)
+        self.mode_cards[self.initial_mode].radio.setChecked(True)
+        page.add_row("Utilisation", "Changer de mode crée la convention correspondante ; rien n'est déplacé.",
+                     column(*cards))
         self.roots = roots_picker(cfg.roots)
         page.add_row("Dossiers à ranger", "TriBin ne range que dans ces dossiers.", self.roots)
         self.excluded = excluded_picker(cfg.local_excluded, self.roots.values)
@@ -280,6 +294,10 @@ class SettingsDialog(QDialog):
 
     # --- actions ------------------------------------------------------------------------------
 
+    def mode(self) -> str:
+        checked = self.mode_group.checkedButton()
+        return checked.property("mode") if checked else "work"
+
     def provider(self) -> str:
         checked = self.provider_group.checkedButton()
         return checked.property("provider") if checked else "mistral"
@@ -328,6 +346,11 @@ class SettingsDialog(QDialog):
         cfg.roots = self.roots.values()
         cfg.local_excluded = self.excluded.values()
         cfg.convention_path = self.convention.text().strip()
+        mode = self.mode()
+        if mode != self.initial_mode and cfg.roots:  # travail <-> personnel : convention du nouveau mode
+            path, note = create_convention(mode, cfg.roots, svc.settings.data_dir)
+            cfg.convention_path = str(path)
+            QMessageBox.information(self, "TriBin", note)
         cfg.auto_file = self.auto_file.isChecked()
         provider = self.provider()
         cfg.provider = provider

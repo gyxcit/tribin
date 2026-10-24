@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import unicodedata
+
 import string
 from pathlib import Path
 
@@ -81,6 +83,9 @@ class Convention(BaseModel):
     version: int = 1
     name: str = "Convention"
     language: str = "fr"
+    # « work » : agence (client / année / projet / catégorie) · « personal » : papiers personnels, par catégorie ;
+    # en mode personnel, une catégorie manquante est créée automatiquement.
+    mode: str = "work"
     structure: Structure = Field(default_factory=Structure)
     naming: Naming = Field(default_factory=Naming)
     clients: list[Client] = Field(default_factory=list)
@@ -97,13 +102,30 @@ class Convention(BaseModel):
             seen.add(key)
         return self
 
+    @property
+    def personal(self) -> bool:
+        return self.mode == "personal"
+
     def category_codes(self) -> list[str]:
         return [c.code for c in self.structure.categories]
+
+    def find_category(self, name: str | None) -> str | None:
+        """Code de la catégorie, sans tenir compte des accents, de la casse ni d'un « s » final
+        (« Santé », « sante » -> « Sante » ; « Salaire » -> « salaire » si c'est le dossier existant)."""
+        if not name:
+            return None
+        key = _category_key(name)
+        return next((c.code for c in self.structure.categories if _category_key(c.code) == key), None)
 
     def client_by_code(self, code: str | None) -> Client | None:
         if not code:
             return None
         return next((c for c in self.clients if c.code.upper() == code.upper()), None)
+
+
+def _category_key(name: str) -> str:
+    key = "".join(ch for ch in unicodedata.normalize("NFKD", name) if not unicodedata.combining(ch)).casefold().strip()
+    return key[:-1] if key.endswith("s") else key
 
 
 class ConventionError(ValueError):

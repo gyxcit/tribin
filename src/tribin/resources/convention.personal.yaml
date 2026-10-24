@@ -1,0 +1,35 @@
+version: 1
+name: "Rangement personnel"
+language: fr
+# Mode personnel : ni client ni projet ; rangement par catégorie puis par année.
+# Si aucune catégorie ne convient, TriBin en crée une (dossier + ligne ajoutée ci-dessous).
+mode: personal
+
+structure:
+  template: "{category}/{year}"
+  categories:
+    - { code: "Administratif", description: "Papiers d'identité, attestations, courriers officiels, état civil" }
+    - { code: "Banque",        description: "Relevés de compte, prêts, épargne, placements" }
+    - { code: "Impots",        description: "Avis d'imposition, déclarations, taxe foncière ou d'habitation" }
+    - { code: "Salaires",      description: "Bulletins de paie, contrats de travail, attestations employeur" }
+    - { code: "Sante",         description: "Ordonnances, remboursements, mutuelle, comptes rendus médicaux" }
+    - { code: "Logement",      description: "Bail, quittances de loyer, électricité, eau, internet, travaux" }
+    - { code: "Assurances",    description: "Contrats et attestations d'assurance (habitation, auto, vie)" }
+    - { code: "Vehicule",      description: "Carte grise, entretien, contrôle technique, amendes" }
+    - { code: "Factures",      description: "Factures d'achats, garanties, abonnements" }
+    - { code: "Etudes",        description: "Diplômes, relevés de notes, inscriptions, formations, CV" }
+    - { code: "Famille",       description: "Enfants, école, CAF, documents familiaux" }
+    - { code: "Photos",        description: "Photos et vidéos personnelles" }
+
+naming:
+  template: "{date}_{description}"
+  separator: "_"
+  word_separator: "-"
+  date_format: "%Y-%m-%d"
+  version_format: "{:02d}"
+  ascii_only: true
+  max_length: 120
+  lowercase_extension: true
+  versioned_categories: []
+
+clients: []

@@ -1,12 +1,11 @@
-"""Premier lancement, en quatre étapes courtes (section 6.8), listées dans une colonne à gauche.
+"""Premier lancement, en cinq étapes courtes (section 6.8), listées dans une colonne à gauche.
 
-1. Bienvenue et confidentialité · 2. Vos dossiers (la convention est déduite automatiquement)
-3. Votre activité (facultatif) · 4. Intelligence artificielle (fournisseur et clé, facultatifs)
+1. Bienvenue et confidentialité · 2. Utilisation (travail ou personnel) · 3. Vos dossiers
+4. Votre activité (facultatif, mode travail seulement) · 5. Intelligence artificielle (fournisseur et clé, facultatifs)
 """
 
 from __future__ import annotations
 
-import shutil
 from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -29,12 +28,9 @@ from PySide6.QtWidgets import (
     QWizardPage,
 )
 
-from tribin import resources
 from tribin.config import save_api_key
-from tribin.convention.loader import Convention, save_convention
 from tribin.llm.base import LLMError
-from tribin.mapping.infer import infer_convention
-from tribin.mapping.scanner import scan_root
+from tribin.service.conventions import create_convention, current_mode
 from tribin.service.profile import PRIVACY_NOTICE, QUESTIONS, build_profile, save_profile
 from tribin.ui.components import ApiKeyField, ChoiceCard, divider, muted, section
 from tribin.ui.folder_picker import excluded_picker, roots_picker
@@ -44,11 +40,18 @@ if TYPE_CHECKING:
     from tribin.ui.app import AppController
 
 ROW_CHARS = 62  # passage à la ligne des choix, selon la longueur des libellés
-STEPS = ("Bienvenue", "Vos dossiers", "Votre activité", "Intelligence artificielle")
+STEPS = ("Bienvenue", "Utilisation", "Vos dossiers", "Votre activité", "Intelligence artificielle")
 RAIL_NOTES = ("Rien n'est supprimé ni écrasé. Chaque rangement s'annule depuis l'Historique.",
+              "Vous pourrez changer de mode à tout moment dans les réglages.",
               "Rien n'est supprimé ni écrasé. Chaque rangement s'annule depuis l'Historique.",
               "Vos réponses restent sur cet ordinateur.",
               "Seul un extrait des fichiers est envoyé à l'IA, jamais le fichier entier.")
+MODE_CHOICES = (
+    ("personal", "Personnel", "Vos papiers, factures, bulletins de paie, photos… rangés par catégorie puis par année. "
+                              "Si aucune catégorie ne convient, TriBin en crée une."),
+    ("work", "Travail (agence, studio)", "Les fichiers de l'équipe, rangés par client, année, projet et catégorie "
+                                          "selon la convention de l'équipe."),
+)
 # (clé, nom, description, où créer la clé, recommandé)
 PROVIDERS = (("mistral", "Mistral AI", "Hébergée en Europe. L'IA par défaut de TriBin, testée sur des dossiers d'agence.",
               "console.mistral.ai", True),
@@ -214,6 +217,7 @@ class OnboardingWizard(QWizard):
         self.rail = StepRail()
         self.setSideWidget(self.rail)
         self.addPage(self._welcome_page())
+        self.addPage(self._mode_page())
         self.addPage(self._folder_page())
         self.addPage(self._about_page())
         self.addPage(self._ai_page())
@@ -247,12 +251,50 @@ class OnboardingWizard(QWizard):
         layout.addStretch()
         return page
 
-    # --- 2. vos dossiers --------------------------------------------------------------------------
+    # --- 2. utilisation ---------------------------------------------------------------------------
+
+    def _mode_page(self) -> QWizardPage:
+        page = QWizardPage()
+        layout = page_layout(page, "Comment allez-vous utiliser TriBin ?",
+                             "TriBin range différemment des papiers personnels et les fichiers d'une équipe.")
+        self.mode_group = QButtonGroup(page)
+        self.mode_cards: dict[str, ChoiceCard] = {}
+        for key, title, description in MODE_CHOICES:
+            card = ChoiceCard(title, description)
+            card.radio.setProperty("mode", key)
+            card.radio.toggled.connect(lambda checked: checked and self._mode_changed())
+            self.mode_group.addButton(card.radio)
+            self.mode_cards[key] = card
+            layout.addWidget(card)
+            layout.addSpacing(8)
+        layout.addStretch()
+        self.mode_cards[current_mode(self.c.service)].radio.setChecked(True)
+        return page
+
+    def mode(self) -> str:
+        checked = self.mode_group.checkedButton()
+        return checked.property("mode") if checked else "work"
+
+    def set_mode(self, key: str) -> None:
+        self.mode_cards[key].radio.setChecked(True)
+
+    def _mode_changed(self) -> None:
+        if hasattr(self, "convention_box"):
+            self.convention_box.setVisible(self.mode() == "work")
+
+    def nextId(self) -> int:  # noqa: N802 — API Qt
+        """Mode personnel : l'étape « Votre activité » (questions d'agence) est sautée."""
+        ids = self.pageIds()
+        if self.currentId() == ids[2] and self.mode() == "personal":
+            return ids[4]
+        return super().nextId()
+
+    # --- 3. vos dossiers --------------------------------------------------------------------------
 
     def _folder_page(self) -> QWizardPage:
         page = CheckedPage(lambda: None if self._roots() else "Choisissez au moins un dossier à ranger.")
         layout = page_layout(page, "Quels dossiers TriBin doit-il ranger ?",
-                             "Choisissez le dossier de l'équipe, sur cet ordinateur, le NAS ou Dropbox. "
+                             "Choisissez le dossier à ranger : sur cet ordinateur, un NAS ou Dropbox. "
                              "TriBin y apprend votre façon de ranger.")
         field_block(layout, "Dossiers à ranger", "Les fichiers ne seront rangés que dans ces dossiers.")
         self.roots = roots_picker(self.c.service.config.roots)
@@ -264,15 +306,20 @@ class OnboardingWizard(QWizard):
                     "Par exemple un projet InDesign en cours : le déplacer casserait ses liens.")
         self.excluded = excluded_picker(self.c.service.config.local_excluded, self._roots)
         layout.addWidget(self.excluded)
-        layout.addSpacing(18)
-        layout.addWidget(divider())
-        layout.addSpacing(14)
-        layout.addWidget(muted("La façon de ranger (convention) est déduite de ces dossiers. "
-                               "S'ils sont vides, TriBin part d'une convention type d'agence."))
+        self.convention_box = QWidget()  # mode travail seulement
+        box = QVBoxLayout(self.convention_box)
+        box.setContentsMargins(0, 0, 0, 0)
+        box.setSpacing(0)
+        layout.addWidget(self.convention_box)
+        box.addSpacing(18)
+        box.addWidget(divider())
+        box.addSpacing(14)
+        box.addWidget(muted("La façon de ranger (convention) est déduite de ces dossiers. "
+                            "S'ils sont vides, TriBin part d'une convention type d'agence."))
         self.use_existing = QPushButton("J'ai déjà un fichier de convention")
         self.use_existing.setObjectName("Link")
         self.use_existing.setCheckable(True)
-        layout.addWidget(self.use_existing, 0, Qt.AlignmentFlag.AlignLeft)
+        box.addWidget(self.use_existing, 0, Qt.AlignmentFlag.AlignLeft)
         self.file_box = QWidget()
         file_row = QHBoxLayout(self.file_box)
         file_row.setContentsMargins(0, 4, 0, 0)
@@ -282,13 +329,14 @@ class OnboardingWizard(QWizard):
         browse.clicked.connect(self._browse)
         file_row.addWidget(self.conv_path, 1)
         file_row.addWidget(browse)
-        layout.addWidget(self.file_box)
+        box.addWidget(self.file_box)
         self.file_box.setVisible(False)
         self.use_existing.toggled.connect(self.file_box.setVisible)
+        self.convention_box.setVisible(self.mode() == "work")
         layout.addStretch()
         return page
 
-    # --- 3. votre activité ------------------------------------------------------------------------
+    # --- 4. votre activité ------------------------------------------------------------------------
 
     def _about_page(self) -> QWizardPage:
         page = QWizardPage()
@@ -307,7 +355,7 @@ class OnboardingWizard(QWizard):
         layout.addStretch()
         return page
 
-    # --- 4. intelligence artificielle ---------------------------------------------------------------
+    # --- 5. intelligence artificielle ---------------------------------------------------------------
 
     def _ai_page(self) -> QWizardPage:
         page = QWizardPage()
@@ -403,21 +451,10 @@ class OnboardingWizard(QWizard):
         super().accept()
 
     def _make_convention(self, roots: list[str]) -> tuple[Path, str]:
-        """Convention : fichier existant, sinon déduite des dossiers, sinon convention type."""
-        if self.use_existing.isChecked():
+        """Convention : fichier existant (mode travail), sinon celle du mode choisi (déduite, type ou personnelle)."""
+        if self.mode() == "work" and self.use_existing.isChecked():
             path = Path(self.conv_path.text().strip())
             if not path.is_file():
                 raise ValueError("fichier de convention introuvable")
             return path, ""
-        target = self.c.service.settings.data_dir / "convention.yaml"
-        target.parent.mkdir(parents=True, exist_ok=True)
-        if target.exists():
-            target = target.with_name(f"convention_{len(list(target.parent.glob('convention*.yaml'))) + 1}.yaml")
-        profiles = [p for r in roots for p in scan_root(Path(r), Convention())]
-        if any(p.file_count for p in profiles):
-            save_convention(infer_convention(profiles), target)
-            return target, ("Convention déduite de vos dossiers. Vous pouvez la relire et l'ajuster à tout moment "
-                            f"(Réglages › Dossiers) : {target}")
-        shutil.copy2(Path(resources.__file__).with_name("convention.example.yaml"), target)
-        return target, ("Vos dossiers sont vides : TriBin part d'une convention type d'agence "
-                        "(client / année / projet / catégorie), modifiable dans les réglages.")
+        return create_convention(self.mode(), roots, self.c.service.settings.data_dir)
