@@ -79,6 +79,8 @@ class BinWindow(QMainWindow):
                           (Qt.Key.Key_Escape, self.skip), (Qt.Key.Key_R, self.return_selected)]:
             shortcut = QShortcut(QKeySequence(key), self)
             shortcut.activated.connect(lambda s=slot: self._shortcut(s))
+        refresh = QShortcut(QKeySequence(QKeySequence.StandardKey.Refresh), self)  # F5 (Cmd+R sur macOS)
+        refresh.activated.connect(self.c.refresh_all)
 
     # --- construction -------------------------------------------------------------------------
 
@@ -133,6 +135,7 @@ class BinWindow(QMainWindow):
         self.queue.setFixedWidth(380)
         self.queue.selection_changed.connect(self._selection_changed)
         self.queue.validate_all_clicked.connect(self.validate_all)
+        self.queue.refresh_clicked.connect(self.c.refresh_all)
         self.detail = DetailPanel()
         self.detail.edited.connect(self._detail_edited)
         self.detail.alternative_chosen.connect(self._apply_alternative)
@@ -140,6 +143,7 @@ class BinWindow(QMainWindow):
         self.detail.return_clicked.connect(self.return_selected)
         self.detail.skip_clicked.connect(self.skip)
         self.detail.browse_clicked.connect(self.pick_folder)
+        self.detail.reanalyze_clicked.connect(self.reanalyze_selected)
         body = QWidget()
         layout = QHBoxLayout(body)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -317,6 +321,12 @@ class BinWindow(QMainWindow):
 
     def skip(self) -> None:
         self.queue.select_next()
+
+    def reanalyze_selected(self) -> None:
+        item = self.current_item()
+        if item:
+            self._edits.pop(item.file_id, None)  # la nouvelle proposition remplace les modifications en cours
+            self.c.reanalyze(item.file_id)
 
     def return_selected(self) -> None:
         item = self.current_item()

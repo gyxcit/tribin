@@ -119,7 +119,7 @@ le **rangement automatique** (désactivé par défaut) range tout seul les fichi
 moins 80 %) ; les autres font l'objet d'une notification qui ouvre TriBin. Un fichier qui demanderait la création d'un
 dossier attend toujours votre accord, et tout s'annule depuis l'Historique.
 
-Dans la fenêtre principale : `Entrée` ranger, `E` modifier le nom, `A` autre possibilité, `Échap` passer, `R` renvoyer à l'origine.
+Dans la fenêtre principale : `Entrée` ranger, `E` modifier le nom, `A` autre possibilité, `Échap` passer, `R` renvoyer à l'origine, `F5` actualiser (relit la clé et les réglages, relance les analyses restées sans IA).
 Chaque rangement s'annule depuis l'Historique.
 
 ## Ligne de commande

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import logging
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from tribin.config import STAGING_DIRNAME, Settings, is_within
+from tribin.config import STAGING_DIRNAME, Settings, is_within, read_api_key
 from tribin.convention.loader import Convention, ConventionError, load_convention
 from tribin.db import Database
 from tribin.engine.context import make_context
@@ -230,6 +230,22 @@ class BinService:
                 self.queue.set_status(item.file_id, "analyzing")
                 ids.append(item.file_id)
         return ids
+
+    def reload(self) -> None:
+        """« Actualiser » : relit la clé API (trousseau, .env), la convention et les réglages."""
+        key = read_api_key(self.settings.provider)
+        if key:
+            self.settings = replace(self.settings, api_key=key)
+        with self._lock:
+            self._contexts.clear()
+            self._convention = None
+
+    def reanalyze(self, file_id: str) -> None:
+        """Demande une nouvelle proposition pour ce fichier (il repasse « en analyse »)."""
+        item = self.queue.get(file_id)
+        if item is None or item.status == "done":
+            raise BinError("Fichier introuvable dans la file d'attente.")
+        self.queue.set_status(file_id, "analyzing")
 
     def recover(self) -> list[QueueItem]:
         """Au lancement : fichiers dont l'analyse a été interrompue (à relancer)."""

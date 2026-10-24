@@ -239,6 +239,27 @@ class AppController:
             self.retry_without_ai()
             self.refresh_queue()
 
+    def refresh_all(self) -> None:
+        """« Actualiser » (bouton, F5) : relit clé et réglages, relance les analyses restées sans IA,
+        met à jour la liste et l'Historique."""
+        self.service.reload()
+        retried = self.service.retry_without_ai()
+        for file_id in retried:
+            self._analyze(file_id)
+        self.refresh_queue()
+        if self.bin_window.pages.currentWidget() is self.bin_window.history:
+            self.bin_window.history.reload()
+        self.bin_window.statusBar().showMessage(
+            f"Actualisé : {len(retried)} fichier{'s' if len(retried) > 1 else ''} relancé{'s' if len(retried) > 1 else ''}"
+            " en analyse." if retried else "Actualisé.", 5000)
+
+    def reanalyze(self, file_id: str) -> None:
+        """« Réanalyser » : nouvelle proposition de l'IA pour ce fichier."""
+        self.service.reload()
+        self.service.reanalyze(file_id)
+        self.refresh_queue()
+        self._analyze(file_id)
+
     def retry_without_ai(self) -> None:
         """Nouvelle clé ou nouveau fournisseur : relance l'analyse des fichiers « à traiter à la main »."""
         for file_id in self.service.retry_without_ai():

@@ -73,6 +73,7 @@ class DetailPanel(QFrame):
     return_clicked = Signal()
     skip_clicked = Signal()
     browse_clicked = Signal()
+    reanalyze_clicked = Signal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -101,14 +102,22 @@ class DetailPanel(QFrame):
         titles.addWidget(self.original)
         titles.addWidget(self.meta)
         top.addLayout(titles, 1)
+        # Actions sur le fichier, sous son nom (le nom garde toute la largeur)
+        tools = QHBoxLayout()
+        tools.setContentsMargins(0, 6, 0, 0)
+        tools.setSpacing(4)
+        self.reanalyze_button = QPushButton("⟳  Réanalyser")
+        self.reanalyze_button.setToolTip("Demander une nouvelle proposition à l'IA pour ce fichier")
+        self.reanalyze_button.clicked.connect(self.reanalyze_clicked)
         self.open_button = QPushButton("Ouvrir")
-        self.open_button.setObjectName("Ghost")
         self.open_button.clicked.connect(self._open_file)
         self.reveal_button = QPushButton("Afficher dans le dossier")
-        self.reveal_button.setObjectName("Ghost")
         self.reveal_button.clicked.connect(self._reveal_file)
-        top.addWidget(self.open_button, 0, Qt.AlignmentFlag.AlignTop)
-        top.addWidget(self.reveal_button, 0, Qt.AlignmentFlag.AlignTop)
+        for button in (self.reanalyze_button, self.open_button, self.reveal_button):
+            button.setObjectName("Small")
+            tools.addWidget(button)
+        tools.addStretch()
+        titles.addLayout(tools)
 
         # --- la proposition de l'IA ---
         content = QWidget()
@@ -305,7 +314,7 @@ class DetailPanel(QFrame):
             self.note.setText(notes[0] if notes else "")
             staged, original = Path(item.staged_path), Path(item.original_path)
             self.preview.setPixmap(thumbnail(staged, 52, 52))
-            self.original.setText(elided(original.name, self.original, 460, Qt.TextElideMode.ElideMiddle))
+            self.original.setText(elided(original.name, self.original, 520, Qt.TextElideMode.ElideMiddle))
             self.original.setToolTip(original.name)
             meta = [original.suffix[1:].upper() or "Fichier"]
             if staged.exists():
@@ -316,6 +325,7 @@ class DetailPanel(QFrame):
             self.name.setText(name)
             for widget in (self.name, self.browse, self.validate_button):
                 widget.setEnabled(ready)
+            self.reanalyze_button.setEnabled(item.status != "analyzing")
             self.set_folder(folder)
             self.pill.setText(level_text(item))
             self.bar.set_value(p.confidence if p and not p.manual else None, LEVEL_COLORS[key])

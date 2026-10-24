@@ -335,3 +335,30 @@ def test_api_key_field_shows_saved_key_clearly(qapp):
     field.set_provider("Gemini", "aistudio.google.com", None)
     assert field.editor.isVisibleTo(field) and not field.status.isVisibleTo(field)
     assert "aistudio.google.com" in field.hint.text()
+
+
+def test_refresh_button_and_reanalyze(qapp, controller):
+    from tribin.llm.base import LLMError
+
+    svc = controller.service
+    working = svc._provider_factory
+
+    def no_key(settings, model=None):
+        raise LLMError("Clé API manquante")
+
+    svc._provider_factory = no_key
+    svc.reload()
+    controller.drop_paths([controller.sb / "inbox" / "scan0042.pdf"])
+    assert wait(qapp, lambda: any(i.status == "ready" and i.proposal and i.proposal.manual for i in svc.pending()))
+
+    svc._provider_factory = working  # la clé vient d'être ajoutée
+    controller.refresh_queue()
+    controller.bin_window.queue.refresh_button.click()
+    assert wait(qapp, lambda: ready_items(controller, 1) and not svc.pending()[0].proposal.manual)
+    assert "Actualisé" in controller.bin_window.statusBar().currentMessage()
+
+    controller.refresh_queue()
+    win = controller.bin_window
+    win.select_file(svc.pending()[0].file_id)
+    win.detail.reanalyze_button.click()
+    assert wait(qapp, lambda: ready_items(controller, 1) and svc.pending()[0].proposal is not None)

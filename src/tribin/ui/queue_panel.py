@@ -80,6 +80,7 @@ class QueueRow(QFrame):
 class QueuePanel(QFrame):
     selection_changed = Signal(str)
     validate_all_clicked = Signal()
+    refresh_clicked = Signal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -97,9 +98,17 @@ class QueuePanel(QFrame):
         top.setSpacing(2)
         title = QLabel("À ranger")
         title.setObjectName("Title")
+        self.refresh_button = QPushButton("⟳  Actualiser")
+        self.refresh_button.setObjectName("Ghost")
+        self.refresh_button.setToolTip("Relit la clé API et les réglages, relance les analyses restées sans IA (F5)")
+        self.refresh_button.clicked.connect(self.refresh_clicked)
+        title_row = QHBoxLayout()
+        title_row.addWidget(title)
+        title_row.addStretch()
+        title_row.addWidget(self.refresh_button)
         self.summary = QLabel()
         self.summary.setObjectName("Muted")
-        top.addWidget(title)
+        top.addLayout(title_row)
         top.addWidget(self.summary)
         top.addSpacing(10)
         self.search = QLineEdit()
