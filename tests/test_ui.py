@@ -237,3 +237,31 @@ def test_empty_state_edits_and_search(qapp, controller):
     assert win.queue.validate_all.label.text() == "Tout valider (2 prêts)"
     win.queue.search.setText("BC_")
     assert win.queue.order == [second.file_id]  # la recherche filtre la file
+
+
+def test_onboarding_simple_flow(qapp, controller, monkeypatch):
+    import tribin.ui.onboarding as onboarding
+
+    saved_keys = []
+    monkeypatch.setattr(onboarding, "save_api_key", lambda key, provider: saved_keys.append((provider, key)))
+    monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: None)
+    wizard = onboarding.OnboardingWizard(controller)
+    controller.extra.append(wizard)
+    assert len(wizard.pageIds()) == 4
+    secteur = wizard.chips["secteur"]
+    agence, studio = secteur.group.buttons()[:2]
+    agence.click()
+    studio.click()
+    assert secteur.value() == "Studio créatif"  # un seul choix à la fois
+    wizard.chips["types"].group.buttons()[0].click()
+    wizard.chips["types"].group.buttons()[1].click()
+    assert wizard.chips["types"].value() == ["Visuels", "Documents"]
+    wizard.provider.setCurrentIndex(wizard.provider.findData("mistral"))
+    wizard.api_key.setText("cle-de-test")
+    wizard.accept()
+    cfg = controller.service.config
+    assert cfg.onboarding_done and cfg.provider == "mistral"
+    assert saved_keys == [("mistral", "cle-de-test")]
+    assert controller.service.ai_settings().api_key == "cle-de-test"
+    conv = Path(cfg.convention_path)
+    assert conv.exists() and conv.parent == controller.service.settings.data_dir  # déduite des dossiers

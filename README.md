@@ -26,9 +26,18 @@ confiance (turquoise = sûr, ambre = à regarder, corail = à vérifier) et les 
 |---|---|---|
 | ![Au repos](docs/screenshots/widget-repos.png) | ![Analyse](docs/screenshots/widget-analyse.png) | ![Prêt](docs/screenshots/widget-pret.png) |
 
-| Réglages | Premier lancement |
+**Premier lancement**, en quatre écrans courts : bienvenue, dossier à ranger (la convention est déduite
+automatiquement), quelques questions facultatives, choix de l'IA (Claude, Gemini ou Mistral).
+
+| 1. Bienvenue | 2. Ton dossier |
 |---|---|
-| ![Réglages](docs/screenshots/reglages.png) | ![Onboarding](docs/screenshots/onboarding.png) |
+| ![Bienvenue](docs/screenshots/onboarding.png) | ![Ton dossier](docs/screenshots/onboarding-2.png) |
+
+| 3. Quelques mots sur toi | 4. Ton IA |
+|---|---|
+| ![Questions](docs/screenshots/onboarding-3.png) | ![IA](docs/screenshots/onboarding-4.png) |
+
+![Réglages](docs/screenshots/reglages.png)
 
 Captures réalisées avec des données de démonstration et une IA simulée ; pour les régénérer :
 `uv run python scripts/make_screenshots.py`.

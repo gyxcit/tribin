@@ -93,6 +93,11 @@ QLineEdit, QPlainTextEdit, QComboBox, QDateEdit {{
     selection-background-color: {NAVY};
 }}
 QLineEdit:focus, QPlainTextEdit:focus, QComboBox:focus {{ border-color: {NAVY}; }}
+QLineEdit, QPlainTextEdit {{ selection-color: white; }}
+QComboBox QAbstractItemView {{ background: {SURFACE}; border: 1px solid {BORDER_STRONG}; outline: none; padding: 4px;
+    selection-background-color: {SELECTION}; selection-color: {INK}; }}
+QAbstractItemView::item:selected, QAbstractItemView::item:hover {{ background: {SELECTION}; color: {INK}; }}
+QComboBox QAbstractItemView::item {{ min-height: 26px; padding: 2px 8px; }}
 QLineEdit#Search {{ border-color: {BORDER}; border-radius: 10px; padding: 9px 12px; }}
 QLineEdit#NewName {{ background: #FAFBFE; font-size: 14px; padding: 9px 12px; }}
 

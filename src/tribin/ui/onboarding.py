@@ -1,4 +1,8 @@
-"""Onboarding du premier lancement : confidentialité, 5 questions, racines, convention (section 6.8)."""
+"""Onboarding du premier lancement, en quatre écrans courts (section 6.8).
+
+1. Bienvenue et confidentialité · 2. Ton dossier (la convention est déduite automatiquement)
+3. Toi, en quelques clics (facultatif) · 4. Ton IA (fournisseur et clé, facultatifs)
+"""
 
 from __future__ import annotations
 
@@ -14,7 +18,6 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFileDialog,
-    QFormLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -28,18 +31,77 @@ from PySide6.QtWidgets import (
     QWizardPage,
 )
 
-from tribin.config import save_api_key
 from tribin import resources
+from tribin.config import save_api_key
 from tribin.convention.loader import Convention, save_convention
 from tribin.llm.base import LLMError
-from tribin.mapping.infer import infer_convention, propose_structure, structure_to_convention
+from tribin.mapping.infer import infer_convention
 from tribin.mapping.scanner import scan_root
 from tribin.service.profile import PRIVACY_NOTICE, QUESTIONS, build_profile, save_profile
+from tribin.ui.components import section
 from tribin.ui.icons import logo_pixmap
-from tribin.ui.settings import path_list
+from tribin.ui.settings import PROVIDER_LABELS, path_list
 
 if TYPE_CHECKING:
     from tribin.ui.app import AppController
+
+CHIPS_PER_ROW = 4
+
+
+class ChipGroup(QWidget):
+    """Choix en boutons à cliquer (un seul, ou plusieurs) : plus simple qu'une liste déroulante."""
+
+    def __init__(self, choices: list[str], multiple: bool):
+        super().__init__()
+        rows = QVBoxLayout(self)
+        rows.setContentsMargins(0, 0, 0, 0)
+        rows.setSpacing(6)
+        self.group = QButtonGroup(self)
+        self.group.setExclusive(False)
+        self.multiple = multiple
+        row = None
+        for index, choice in enumerate(choices):
+            if index % CHIPS_PER_ROW == 0:
+                if row is not None:
+                    row.addStretch()
+                row = QHBoxLayout()
+                row.setSpacing(6)
+                rows.addLayout(row)
+            button = QPushButton(choice)
+            button.setObjectName("Chip")
+            button.setCheckable(True)
+            self.group.addButton(button)
+            row.addWidget(button)
+        if row is not None:
+            row.addStretch()
+        self.group.buttonToggled.connect(self._toggled)
+
+    def _toggled(self, button: QPushButton, checked: bool) -> None:
+        if checked and not self.multiple:  # un seul choix, mais on peut tout décocher (facultatif)
+            for other in self.group.buttons():
+                if other is not button:
+                    other.setChecked(False)
+
+    def value(self) -> object:
+        picked = [b.text() for b in self.group.buttons() if b.isChecked()]
+        return picked if self.multiple else (picked[0] if picked else None)
+
+
+class CheckedPage(QWizardPage):
+    """Page dont le bouton « Suivant » vérifie d'abord une condition (message clair sinon)."""
+
+    def __init__(self, check=None):
+        super().__init__()
+        self._check = check
+
+    def validatePage(self) -> bool:  # noqa: N802 — API Qt
+        if self._check is None:
+            return True
+        message = self._check()
+        if message:
+            QMessageBox.information(self, "TriBin", message)
+            return False
+        return True
 
 
 class OnboardingWizard(QWizard):
@@ -50,130 +112,198 @@ class OnboardingWizard(QWizard):
         self.resize(760, 600)
         self.setWizardStyle(QWizard.WizardStyle.ModernStyle)
         self.setPixmap(QWizard.WizardPixmap.LogoPixmap, logo_pixmap(56))
-        for button, text in [(QWizard.WizardButton.NextButton, "Suivant >"), (QWizard.WizardButton.BackButton, "< Précédent"),
-                             (QWizard.WizardButton.FinishButton, "Terminer"), (QWizard.WizardButton.CancelButton, "Annuler")]:
+        self.setOption(QWizard.WizardOption.NoBackButtonOnStartPage, True)
+        for button, text in [(QWizard.WizardButton.NextButton, "Suivant"), (QWizard.WizardButton.BackButton, "Retour"),
+                             (QWizard.WizardButton.FinishButton, "C'est parti"), (QWizard.WizardButton.CancelButton, "Annuler")]:
             self.setButtonText(button, text)
+        for primary in (QWizard.WizardButton.NextButton, QWizard.WizardButton.FinishButton):
+            button = self.button(primary)
+            button.setObjectName("Primary")
+            button.style().unpolish(button)  # bouton déjà créé par Qt : recalculer son style
+            button.style().polish(button)
+        self.addPage(self._welcome_page())
+        self.addPage(self._folder_page())
+        self.addPage(self._about_page())
+        self.addPage(self._ai_page())
 
-        welcome = QWizardPage()
-        welcome.setTitle("Bienvenue dans TriBin")
-        welcome.setSubTitle("Le tri de tes fichiers, sans effort.")
-        wl = QVBoxLayout(welcome)
-        intro = QLabel("TriBin fonctionne comme la Corbeille : tu y glisses un fichier, l'IA propose où le ranger "
-                       "et comment le renommer selon la convention de ton équipe. Tu valides ou tu corriges ; "
-                       "rien n'est jamais supprimé ni écrasé, et tout est annulable.")
-        intro.setWordWrap(True)
+    # --- 1. bienvenue -----------------------------------------------------------------------------
+
+    def _welcome_page(self) -> QWizardPage:
+        page = QWizardPage()
+        page.setTitle("Bienvenue dans TriBin")
+        page.setSubTitle("Étape 1 sur 4 · Le tri de tes fichiers, sans effort.")
+        layout = QVBoxLayout(page)
+        layout.setSpacing(14)
+        for text in ("Tu glisses un fichier sur TriBin. L'IA te propose où le ranger et comment le renommer, "
+                     "selon les habitudes de ton équipe.",
+                     "Tu valides d'un clic, ou tu corriges. Rien n'est jamais supprimé ni écrasé, et tout s'annule."):
+            label = QLabel(text)
+            label.setWordWrap(True)
+            layout.addWidget(label)
         privacy = QLabel(PRIVACY_NOTICE)
+        privacy.setObjectName("Muted")
         privacy.setWordWrap(True)
+        layout.addSpacing(8)
+        layout.addWidget(privacy)
         self.accept_privacy = QCheckBox("J'ai compris")
-        welcome.registerField("privacy*", self.accept_privacy)
-        for w in (intro, privacy, self.accept_privacy):
-            wl.addWidget(w)
-        wl.addStretch()
-        self.addPage(welcome)
+        page.registerField("privacy*", self.accept_privacy)
+        layout.addWidget(self.accept_privacy)
+        layout.addStretch()
+        return page
 
-        questions = QWizardPage()
-        questions.setTitle("Quelques questions")
-        questions.setSubTitle("Toutes facultatives : elles aident l'IA à comprendre ton contexte.")
-        ql = QFormLayout(questions)
-        self.combos: dict[str, QComboBox] = {}
-        self.checks: dict[str, list[QCheckBox]] = {}
-        for key, label, choices, multiple in QUESTIONS:
-            if multiple:
-                box = QWidget()
-                row = QHBoxLayout(box)
-                row.setContentsMargins(0, 0, 0, 0)
-                self.checks[key] = [QCheckBox(choice) for choice in choices]
-                for cb in self.checks[key]:
-                    row.addWidget(cb)
-                ql.addRow(label, box)
-            else:
-                combo = QComboBox()
-                combo.addItems(["—", *choices])
-                self.combos[key] = combo
-                ql.addRow(label, combo)
-        self.context = QPlainTextEdit()
-        self.context.setPlaceholderText("Précise ton contexte en quelques mots")
-        self.context.setMaximumHeight(90)
-        ql.addRow("Contexte", self.context)
-        self.addPage(questions)
+    # --- 2. ton dossier ---------------------------------------------------------------------------
 
-        roots_page = QWizardPage()
-        roots_page.setTitle("Où ranger ?")
-        roots_page.setSubTitle("Les dossiers gérés par TriBin, et ceux auxquels il ne touchera jamais.")
-        rl = QVBoxLayout(roots_page)
-        rl.addWidget(QLabel("Racines : dossiers (disque local ou NAS) dans lesquels TriBin range les fichiers."))
-        box, self.roots = path_list(controller.service.config.roots)
-        rl.addWidget(box)
-        rl.addWidget(QLabel("Zones exclues : TriBin n'y touchera jamais (un motif par ligne)."))
-        self.excluded = QPlainTextEdit("**/_PROJET_EN_COURS/**")
-        self.excluded.setMaximumHeight(80)
-        rl.addWidget(self.excluded)
-        self.addPage(roots_page)
+    def _folder_page(self) -> QWizardPage:
+        page = CheckedPage(lambda: None if self._roots() else "Choisis au moins un dossier à ranger.")
+        page.setTitle("Quel dossier ranger ?")
+        page.setSubTitle("Étape 2 sur 4 · Le dossier de l'équipe : sur ton ordinateur, sur le NAS ou dans Dropbox.")
+        layout = QVBoxLayout(page)
+        layout.setSpacing(10)
+        box, self.roots = path_list(self.c.service.config.roots)
+        self.roots.setMaximumHeight(90)
+        layout.addWidget(box)
 
-        conv_page = QWizardPage()
-        conv_page.setTitle("Convention de rangement")
-        conv_page.setSubTitle("La structure des dossiers et la façon de nommer les fichiers dans ton équipe.")
-        cl = QVBoxLayout(conv_page)
-        self.mode = QButtonGroup(conv_page)
-        options = [("existing", "J'ai déjà un fichier de convention (ex. sur le NAS)"),
-                   ("map", "Cartographier l'existant et en déduire une convention"),
-                   ("scratch", "Créer une structure de zéro avec l'IA"),
-                   ("example", "Partir de la convention d'exemple")]
-        for i, (key, label) in enumerate(options):
-            radio = QRadioButton(label)
-            radio.setProperty("mode", key)
-            self.mode.addButton(radio, i)
-            cl.addWidget(radio)
-        self.mode.button(1).setChecked(True)
+        layout.addSpacing(6)
+        layout.addWidget(section("Convention de rangement"))
+        self.mode = QButtonGroup(page)
+        auto = QRadioButton("Déduire automatiquement de ce dossier (recommandé)")
+        auto.setProperty("mode", "map")
+        existing = QRadioButton("J'ai déjà un fichier de convention (par exemple sur le NAS)")
+        existing.setProperty("mode", "existing")
+        for index, radio in enumerate((auto, existing)):
+            self.mode.addButton(radio, index)
+            layout.addWidget(radio)
+        auto.setChecked(True)
         file_row = QHBoxLayout()
-        self.conv_path = QLineEdit(controller.service.config.convention_path)
+        self.conv_path = QLineEdit(self.c.service.config.convention_path)
+        self.conv_path.setPlaceholderText("Fichier de convention (.yaml)")
         browse = QPushButton("Parcourir…")
         browse.clicked.connect(self._browse)
         file_row.addWidget(self.conv_path)
         file_row.addWidget(browse)
-        cl.addLayout(file_row)
-        cl.addWidget(QLabel(f"Clé API {controller.service.settings.provider.capitalize()} "
-                            "(facultatif, modifiable dans les réglages) :"))
+        self.file_box = QWidget()
+        self.file_box.setLayout(file_row)
+        file_row.setContentsMargins(24, 0, 0, 0)
+        layout.addWidget(self.file_box)
+        hint = QLabel("TriBin repère la structure et le nommage déjà en place. Si le dossier est vide, "
+                      "il part d'une convention type d'agence (client / année / projet / catégorie).")
+        hint.setObjectName("Muted")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        self.mode.buttonToggled.connect(lambda *_: self.file_box.setVisible(existing.isChecked()))
+        self.file_box.setVisible(False)
+
+        layout.addSpacing(6)
+        advanced = QPushButton("Options avancées : dossiers à ne jamais toucher ▸")
+        advanced.setObjectName("Link")
+        layout.addWidget(advanced, 0, Qt.AlignmentFlag.AlignLeft)
+        self.excluded = QPlainTextEdit("**/_PROJET_EN_COURS/**")
+        self.excluded.setMaximumHeight(70)
+        self.excluded.setToolTip("Un motif par ligne, relatif au dossier. Exemple : **/_PROJET_EN_COURS/**")
+        self.excluded.setVisible(False)
+        advanced.clicked.connect(lambda: self.excluded.setVisible(not self.excluded.isVisible()))
+        layout.addWidget(self.excluded)
+        layout.addStretch()
+        return page
+
+    # --- 3. toi ----------------------------------------------------------------------------------
+
+    def _about_page(self) -> QWizardPage:
+        page = QWizardPage()
+        page.setTitle("Quelques mots sur toi")
+        page.setSubTitle("Étape 3 sur 4 · Facultatif : ça aide l'IA à comprendre ton contexte. Tu peux passer.")
+        layout = QVBoxLayout(page)
+        layout.setSpacing(6)
+        self.chips: dict[str, ChipGroup] = {}
+        for key, label, choices, multiple in QUESTIONS:
+            caption = QLabel(label + (" (plusieurs choix possibles)" if multiple else ""))
+            caption.setStyleSheet("font-weight: 600;")
+            layout.addWidget(caption)
+            self.chips[key] = ChipGroup(choices, multiple)
+            layout.addWidget(self.chips[key])
+            layout.addSpacing(6)
+        self.context = QLineEdit()
+        self.context.setPlaceholderText("Autre chose à préciser ? Ex. : agence de 20 personnes, clients agroalimentaires")
+        layout.addWidget(self.context)
+        layout.addStretch()
+        return page
+
+    # --- 4. ton IA -------------------------------------------------------------------------------
+
+    def _ai_page(self) -> QWizardPage:
+        page = QWizardPage()
+        page.setTitle("Ton IA")
+        page.setSubTitle("Étape 4 sur 4 · Le service qui propose les rangements. Modifiable plus tard dans les Réglages.")
+        layout = QVBoxLayout(page)
+        layout.setSpacing(10)
+        layout.addWidget(section("Fournisseur"))
+        self.provider = QComboBox()
+        for key, label in PROVIDER_LABELS.items():
+            self.provider.addItem(label, key)
+        current = self.c.service.config.provider or self.c.service.settings.provider
+        self.provider.setCurrentIndex(max(0, self.provider.findData(current)))
+        self.provider.currentIndexChanged.connect(lambda _: self._provider_changed())
+        layout.addWidget(self.provider)
+        layout.addWidget(section("Clé API (facultatif)"))
         self.api_key = QLineEdit()
         self.api_key.setEchoMode(QLineEdit.EchoMode.Password)
-        cl.addWidget(self.api_key)
-        cl.addStretch()
-        self.addPage(conv_page)
+        layout.addWidget(self.api_key)
+        self.key_hint = QLabel()
+        self.key_hint.setObjectName("Muted")
+        self.key_hint.setWordWrap(True)
+        layout.addWidget(self.key_hint)
+        layout.addStretch()
+        self._provider_changed()
+        return page
+
+    def _provider_changed(self) -> None:
+        provider = self.provider.currentData()
+        label = PROVIDER_LABELS[provider]
+        has_key = bool(self.c.service.settings.for_provider(provider).api_key)
+        self.api_key.setPlaceholderText("Une clé est déjà configurée sur cet ordinateur" if has_key
+                                        else f"Colle ta clé API {label}")
+        self.key_hint.setText(("Rien à faire : la clé déjà configurée sera utilisée. " if has_key else
+                               "Sans clé, TriBin fonctionne mais chaque fichier sera à ranger à la main. ")
+                              + "La clé est rangée dans le trousseau du système, jamais dans un fichier partagé.")
+
+    # --- valeurs et fin ---------------------------------------------------------------------------
+
+    def _roots(self) -> list[str]:
+        return [self.roots.item(i).text() for i in range(self.roots.count())]
 
     def _browse(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "Fichier de convention", "", "YAML (*.yaml *.yml)")
         if path:
             self.conv_path.setText(path)
-            self.mode.button(0).setChecked(True)
 
     def answers(self) -> dict[str, object]:
-        result: dict[str, object] = {k: c.currentText() for k, c in self.combos.items() if c.currentIndex() > 0}
-        for key, boxes in self.checks.items():
-            picked = [b.text() for b in boxes if b.isChecked()]
-            if picked:
-                result[key] = picked
-        if self.context.toPlainText().strip():
-            result["contexte"] = self.context.toPlainText().strip()
+        result = {key: group.value() for key, group in self.chips.items() if group.value()}
+        if self.context.text().strip():
+            result["contexte"] = self.context.text().strip()
         return result
 
     def accept(self) -> None:
         svc = self.c.service
-        roots = [self.roots.item(i).text() for i in range(self.roots.count())]
+        roots = self._roots()
         if not roots:
-            QMessageBox.warning(self, "TriBin", "Ajoute au moins un répertoire de référence.")
+            QMessageBox.warning(self, "TriBin", "Choisis au moins un dossier à ranger.")
             return
+        provider = self.provider.currentData()
+        cfg = svc.config
+        cfg.provider, cfg.model = provider, ""  # modèle par défaut du fournisseur
+        svc.update_config(cfg)
+        svc.settings = svc.settings.for_provider(provider)
         key = self.api_key.text().strip()
         if key:
             try:
-                save_api_key(key, svc.settings.provider)
-            except Exception:
+                save_api_key(key, provider)
+            except Exception:  # trousseau indisponible : la clé reste valable pour cette session
                 pass
             svc.settings = replace(svc.settings, api_key=key)
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
-            llm = self.c.llm_or_none()
-            save_profile(svc.settings.profile_path, build_profile(self.answers(), llm))
-            convention_path = self._make_convention(roots, llm)
+            save_profile(svc.settings.profile_path, build_profile(self.answers(), self.c.llm_or_none()))
+            convention_path, note = self._make_convention(roots)
         except (LLMError, OSError, ValueError) as exc:
             QApplication.restoreOverrideCursor()
             QMessageBox.warning(self, "TriBin", f"Étape impossible : {exc}")
@@ -186,35 +316,26 @@ class OnboardingWizard(QWizard):
         cfg.onboarding_done = True
         cfg.privacy_accepted = True
         svc.update_config(cfg)
+        if note:
+            QMessageBox.information(self, "TriBin", note)
         super().accept()
 
-    def _make_convention(self, roots: list[str], llm) -> Path:
-        mode = self.mode.checkedButton().property("mode")
-        target = self.c.service.settings.data_dir / "convention.yaml"
-        target.parent.mkdir(parents=True, exist_ok=True)
-        if mode == "existing":
+    def _make_convention(self, roots: list[str]) -> tuple[Path, str]:
+        """Convention : fichier existant, sinon déduite des dossiers, sinon convention type."""
+        if self.mode.checkedButton().property("mode") == "existing":
             path = Path(self.conv_path.text().strip())
             if not path.is_file():
                 raise ValueError("fichier de convention introuvable")
-            return path
+            return path, ""
+        target = self.c.service.settings.data_dir / "convention.yaml"
+        target.parent.mkdir(parents=True, exist_ok=True)
         if target.exists():
             target = target.with_name(f"convention_{len(list(target.parent.glob('convention*.yaml'))) + 1}.yaml")
-        if mode == "example":
-            shutil.copy2(Path(resources.__file__).with_name("convention.example.yaml"), target)
-        elif mode == "map":
-            profiles = [p for r in roots for p in scan_root(Path(r), Convention())]
+        profiles = [p for r in roots for p in scan_root(Path(r), Convention())]
+        if any(p.file_count for p in profiles):
             save_convention(infer_convention(profiles), target)
-            QMessageBox.information(self, "TriBin", f"Convention déduite de l'existant : {target}\n"
-                                    "Relis-la (structure, catégories, clients) et corrige-la si besoin.")
-        else:
-            if llm is None:
-                raise ValueError("une clé API est nécessaire pour créer une structure avec l'IA")
-            save_convention(structure_to_convention(propose_structure(svc_profile(self.c), llm)), target)
-        return target
-
-
-def svc_profile(controller: AppController) -> str:
-    try:
-        return controller.service.settings.profile_path.read_text(encoding="utf-8")
-    except OSError:
-        return ""
+            return target, ("Convention déduite de tes dossiers. Tu peux la relire et l'ajuster à tout moment "
+                            f"(Réglages > Général) : {target}")
+        shutil.copy2(Path(resources.__file__).with_name("convention.example.yaml"), target)
+        return target, ("Ton dossier est vide : TriBin part d'une convention type d'agence "
+                        "(client / année / projet / catégorie), modifiable dans les Réglages.")
