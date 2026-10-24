@@ -131,7 +131,11 @@ def test_windows_are_constructible(qapp, controller):
     assert windows[2].pageIds()
 
 
-def test_bin_icon_badge(qapp):
-    from tribin.ui.icons import bin_pixmap
+def test_logo_and_badge(qapp):
+    from tribin.ui.icons import LOGO_SVG, app_icon, logo_pixmap
 
-    assert not bin_pixmap(32, 0).toImage() == bin_pixmap(32, 3).toImage()
+    assert LOGO_SVG.exists()
+    plain = logo_pixmap(32, 0).toImage()
+    assert plain.pixelColor(16, 16).alpha() == 255  # le logo est bien dessiné (pas une image vide)
+    assert plain != logo_pixmap(32, 3).toImage()  # la pastille change l'icône
+    assert not app_icon(5).isNull()

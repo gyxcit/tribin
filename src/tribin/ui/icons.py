@@ -1,50 +1,51 @@
-"""Icône de la corbeille dessinée par le code (avec pastille du nombre de fichiers en attente)."""
+"""Logo de TriBin (entonnoir : le désordre entre, l'ordre sort), avec pastille du nombre de fichiers en attente."""
 
 from __future__ import annotations
 
-from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QBrush, QColor, QFont, QIcon, QPainter, QPainterPath, QPen, QPixmap
+from functools import lru_cache
+from pathlib import Path
 
-ACCENT = QColor("#2f6fdf")
+from PySide6.QtCore import QRectF, Qt
+from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
+from PySide6.QtSvg import QSvgRenderer
+
+from tribin import resources
+
+LOGO_SVG = Path(resources.__file__).with_name("logo.svg")
+BADGE = QColor("#E5484D")
 
 
-def bin_pixmap(size: int = 64, count: int = 0, color: QColor = ACCENT) -> QPixmap:
+@lru_cache(maxsize=1)
+def _renderer() -> QSvgRenderer:
+    return QSvgRenderer(str(LOGO_SVG))
+
+
+def logo_pixmap(size: int = 64, count: int = 0) -> QPixmap:
+    """Logo à la taille demandée ; pastille rouge avec le nombre de fichiers en attente si `count` > 0."""
     pix = QPixmap(size, size)
     pix.fill(Qt.GlobalColor.transparent)
     p = QPainter(pix)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    s = size / 64
-    p.setPen(QPen(color.darker(130), 3 * s))
-    p.setBrush(QBrush(color))
-    body = QPainterPath()
-    body.moveTo(QPointF(14 * s, 20 * s))
-    body.lineTo(QPointF(50 * s, 20 * s))
-    body.lineTo(QPointF(46 * s, 58 * s))
-    body.lineTo(QPointF(18 * s, 58 * s))
-    body.closeSubpath()
-    p.drawPath(body)
-    p.drawRoundedRect(QRectF(10 * s, 12 * s, 44 * s, 7 * s), 2 * s, 2 * s)
-    p.drawRect(QRectF(26 * s, 7 * s, 12 * s, 5 * s))
-    p.setPen(QPen(QColor("white"), 2.5 * s))
-    for x in (25, 32, 39):
-        p.drawLine(QPointF(x * s, 27 * s), QPointF(x * s, 51 * s))
+    _renderer().render(p, QRectF(0, 0, size, size))
     if count:
         text = str(count) if count < 100 else "99+"
+        d = size * 0.52
+        rect = QRectF(size - d, 0, d, d)
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QColor("#e5484d"))
-        p.drawEllipse(QRectF(34 * s, 30 * s, 30 * s, 30 * s))
+        p.setBrush(BADGE)
+        p.drawEllipse(rect)
         p.setPen(QColor("white"))
         font = QFont()
         font.setBold(True)
-        font.setPixelSize(int((16 if count < 10 else 12) * s))
+        font.setPixelSize(max(6, int(d * (0.55 if count < 10 else 0.42))))
         p.setFont(font)
-        p.drawText(QRectF(34 * s, 30 * s, 30 * s, 30 * s), Qt.AlignmentFlag.AlignCenter, text)
+        p.drawText(rect, Qt.AlignmentFlag.AlignCenter, text)
     p.end()
     return pix
 
 
-def bin_icon(count: int = 0) -> QIcon:
+def app_icon(count: int = 0) -> QIcon:
     icon = QIcon()
-    for size in (16, 24, 32, 48, 64, 128):
-        icon.addPixmap(bin_pixmap(size, count))
+    for size in (16, 24, 32, 48, 64, 128, 256):
+        icon.addPixmap(logo_pixmap(size, count))
     return icon

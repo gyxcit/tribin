@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QMenu, QSystemTrayIcon
 
-from tribin.ui.icons import bin_icon
+from tribin.ui.icons import app_icon
 
 if TYPE_CHECKING:
     from tribin.ui.app import AppController
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 class Tray(QSystemTrayIcon):
     def __init__(self, controller: AppController):
-        super().__init__(bin_icon())
+        super().__init__(app_icon())
         self.c = controller
         menu = QMenu()
         for label, slot in [("Corbeille", controller.show_bin), ("Historique", controller.show_history),
@@ -40,5 +40,5 @@ class Tray(QSystemTrayIcon):
             self.c.show_bin()
 
     def set_count(self, count: int) -> None:
-        self.setIcon(bin_icon(count))
-        self.setToolTip(f"TriBin — {count} fichier(s) en attente" if count else "TriBin — corbeille vide")
+        self.setIcon(app_icon(count))
+        self.setToolTip(f"TriBin — {count} fichier(s) en attente" if count else "TriBin — aucun fichier en attente")

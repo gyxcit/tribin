@@ -30,7 +30,7 @@ from tribin.engine.proposer import normalize_rel
 from tribin.service.bin import Validation
 from tribin.service.queue import QueueItem
 from tribin.ui.drop_widget import dropped_paths
-from tribin.ui.icons import bin_icon
+from tribin.ui.icons import app_icon
 
 if TYPE_CHECKING:
     from tribin.ui.app import AppController
@@ -67,7 +67,7 @@ class BinWindow(QMainWindow):
         self._chosen_alt: dict[str, int] = {}
         self._filling = False
         self.setWindowTitle("TriBin — Corbeille")
-        self.setWindowIcon(bin_icon())
+        self.setWindowIcon(app_icon())
         self.setAcceptDrops(True)
         self.resize(1100, 520)
 

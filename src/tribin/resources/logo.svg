@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- TriBin : le désordre entre (papiers en vrac), l'ordre sort (barres alignées). -->
+  <rect width="256" height="256" rx="56" fill="#1F2544"/>
+  <rect x="54" y="22" width="30" height="36" rx="5" fill="#14B8A6" transform="rotate(-18 69 40)"/>
+  <rect x="113" y="16" width="30" height="36" rx="5" fill="#F5A524" transform="rotate(12 128 34)"/>
+  <rect x="172" y="24" width="30" height="36" rx="5" fill="#F0605A" transform="rotate(-8 187 42)"/>
+  <path d="M40 72a8 8 0 0 1 8-8h160a8 8 0 0 1 5.7 13.7L156 136v24a6 6 0 0 1-6 6h-44a6 6 0 0 1-6-6v-24L42.3 77.7A8 8 0 0 1 40 72z" fill="#FFFFFF"/>
+  <rect x="66" y="180" width="124" height="13" rx="6.5" fill="#14B8A6"/>
+  <rect x="66" y="200" width="124" height="13" rx="6.5" fill="#F5A524"/>
+  <rect x="66" y="220" width="124" height="13" rx="6.5" fill="#F0605A"/>
+</svg>

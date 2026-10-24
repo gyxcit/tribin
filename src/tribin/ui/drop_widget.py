@@ -8,7 +8,7 @@ from PySide6.QtCore import QPoint, Qt, Signal
 from PySide6.QtGui import QDragEnterEvent, QDropEvent, QMouseEvent
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
-from tribin.ui.icons import bin_pixmap
+from tribin.ui.icons import logo_pixmap
 
 
 def dropped_paths(event: QDropEvent) -> list[Path]:
@@ -39,7 +39,7 @@ class DropWidget(QWidget):
         self.resize(96, 110)
 
     def set_count(self, count: int, highlight: bool = False) -> None:
-        self.icon.setPixmap(bin_pixmap(72, count))
+        self.icon.setPixmap(logo_pixmap(72, count))
         self.label.setText("Dépose ici" if highlight else (f"{count} en attente" if count else "TriBin"))
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:

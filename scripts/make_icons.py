@@ -1,34 +1,52 @@
-"""Génère les icônes d'empaquetage (packaging/tribin.ico et packaging/tribin.icns) avec Pillow."""
+"""Génère les icônes d'empaquetage (packaging/tribin.ico, .icns, .png) à partir du logo src/tribin/resources/logo.svg.
+
+    uv run python scripts/make_icons.py
+
+Le SVG est rendu par Qt (PySide6, option « ui »), puis Pillow écrit les formats Windows et macOS.
+"""
 
 from __future__ import annotations
 
+import io
+import os
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from PIL import Image
 
-OUT = Path(__file__).resolve().parents[1] / "packaging"
-BLUE, DARK, WHITE = (47, 111, 223, 255), (33, 78, 156, 255), (255, 255, 255, 255)
+REPO = Path(__file__).resolve().parents[1]
+LOGO = REPO / "src" / "tribin" / "resources" / "logo.svg"
+OUT = REPO / "packaging"
 
 
-def draw(size: int) -> Image.Image:
-    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    s = size / 64
-    w = max(1, round(3 * s))
-    d.polygon([(14 * s, 20 * s), (50 * s, 20 * s), (46 * s, 58 * s), (18 * s, 58 * s)], fill=BLUE, outline=DARK, width=w)
-    d.rounded_rectangle([10 * s, 12 * s, 54 * s, 19 * s], radius=2 * s, fill=BLUE, outline=DARK, width=w)
-    d.rectangle([26 * s, 7 * s, 38 * s, 12 * s], fill=BLUE, outline=DARK, width=w)
-    for x in (25, 32, 39):
-        d.line([(x * s, 27 * s), (x * s, 51 * s)], fill=WHITE, width=max(1, round(2.5 * s)))
-    return img
+def render(size: int) -> Image.Image:
+    """Rend le logo SVG en image RGBA de `size` pixels."""
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtCore import QBuffer, QIODevice, QRectF, Qt
+    from PySide6.QtGui import QGuiApplication, QImage, QPainter
+    from PySide6.QtSvg import QSvgRenderer
+
+    _app = QGuiApplication.instance() or QGuiApplication([])  # noqa: F841 — nécessaire au rendu Qt
+    image = QImage(size, size, QImage.Format.Format_ARGB32)
+    image.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(image)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    QSvgRenderer(str(LOGO)).render(painter, QRectF(0, 0, size, size))
+    painter.end()
+    buffer = QBuffer()
+    buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+    image.save(buffer, "PNG")
+    return Image.open(io.BytesIO(bytes(buffer.data()))).convert("RGBA")
 
 
 def main() -> None:
     OUT.mkdir(exist_ok=True)
-    big = draw(1024)
-    big.save(OUT / "tribin.ico", sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
+    big = render(1024)
+    # Les petites tailles sont rendues directement (plus nettes qu'une réduction de la grande image).
+    sizes = [16, 24, 32, 48, 64, 128, 256]
+    frames = [render(s) for s in sizes]
+    frames[-1].save(OUT / "tribin.ico", sizes=[(s, s) for s in sizes], append_images=frames[:-1])
     big.save(OUT / "tribin.icns")
-    big.resize((256, 256), Image.LANCZOS).save(OUT / "tribin.png")
+    render(256).save(OUT / "tribin.png")
     print(f"Icônes écrites dans {OUT}")
 
 
