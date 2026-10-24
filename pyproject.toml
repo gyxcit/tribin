@@ -26,6 +26,7 @@ dependencies = [
 [project.optional-dependencies]
 ui = ["PySide6-Essentials>=6.6"]
 packaging = ["pyinstaller>=6.0"]
+gemini = ["google-genai>=1.0"]
 
 [project.scripts]
 tribin = "tribin.__main__:main"

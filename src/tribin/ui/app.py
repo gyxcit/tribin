@@ -89,7 +89,7 @@ class AppController:
 
     def llm_or_none(self):
         try:
-            return make_provider(self.service.settings, self.service.config.model or None)
+            return make_provider(self.service.ai_settings(), self.service.config.model or None)
         except LLMError:
             return None
 

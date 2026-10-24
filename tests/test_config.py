@@ -42,11 +42,11 @@ def test_guard_disabled_accepts_anything(settings, tmp_path):
 
 def test_load_settings_reads_env(monkeypatch, tmp_path):
     monkeypatch.setenv("TRIBIN_DEV_SANDBOX", "0")
-    monkeypatch.setenv("TRIBIN_MODEL", "modele-x")
+    monkeypatch.setenv("TRIBIN_MODEL", "claude-modele-x")
     monkeypatch.setenv("TRIBIN_DATA_DIR", str(tmp_path / "d"))
     s = load_settings(env_file=tmp_path / "absent.env")
     assert s.dev_sandbox is False
-    assert s.model == "modele-x"
+    assert s.model == "claude-modele-x"
     assert s.journal_dir == Path(tmp_path / "d" / "journal")
 
 

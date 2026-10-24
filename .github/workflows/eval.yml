@@ -1,39 +1,48 @@
 name: eval
 
 # Évaluation de la qualité des propositions sur la sandbox (section 10). Aucun fichier n'est déplacé.
-# Nécessite le secret de dépôt ANTHROPIC_API_KEY. Échoue sous 70 % de dossiers corrects (objectif de la phase 1).
+# Nécessite le secret de dépôt de la clé du fournisseur choisi (ANTHROPIC_API_KEY ou GEMINI_API_KEY).
+# Échoue sous 70 % de dossiers corrects (objectif de la phase 1).
 on:
   workflow_dispatch:
     inputs:
+      provider:
+        description: "Fournisseur d'IA"
+        type: choice
+        options: [anthropic, gemini]
+        default: anthropic
       model:
-        description: "Modèle (claude-haiku-5-5 ou claude-sonnet-5-5)"
-        default: "claude-haiku-5-5"
+        description: "Modèle (vide : modèle par défaut du fournisseur)"
+        default: ""
 
 jobs:
   eval:
     runs-on: ubuntu-latest
+    env:
+      TRIBIN_PROVIDER: ${{ inputs.provider }}
+      TRIBIN_MODEL: ${{ inputs.model }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      PYTHONIOENCODING: utf-8
+      COLUMNS: "160"
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
       - name: Vérifier la clé API
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          if [ -z "$ANTHROPIC_API_KEY" ]; then
-            echo "::error::Secret ANTHROPIC_API_KEY absent : ajoute-le dans Settings > Secrets and variables > Actions."
+          if [ "$TRIBIN_PROVIDER" = "gemini" ]; then key="$GEMINI_API_KEY"; name=GEMINI_API_KEY; else key="$ANTHROPIC_API_KEY"; name=ANTHROPIC_API_KEY; fi
+          if [ -z "$key" ]; then
+            echo "::error::Secret $name absent : ajoute-le dans Settings > Secrets and variables > Actions."
             exit 1
           fi
-      - run: uv sync
+      - run: uv sync --extra gemini
       - run: uv run python scripts/make_sandbox.py
       - name: Évaluer
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           TRIBIN_DATA_DIR: ${{ runner.temp }}/tribin-data
-          PYTHONIOENCODING: utf-8
-          COLUMNS: "160"
-        run: uv run python -m tribin eval sandbox/ --model "${{ inputs.model }}" -v --min-score 70
+        run: uv run python -m tribin eval sandbox/ -v --min-score 70
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: eval-results-${{ inputs.model }}
+          name: eval-results-${{ inputs.provider }}
           path: eval_results/

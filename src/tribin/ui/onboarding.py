@@ -125,7 +125,8 @@ class OnboardingWizard(QWizard):
         file_row.addWidget(self.conv_path)
         file_row.addWidget(browse)
         cl.addLayout(file_row)
-        cl.addWidget(QLabel("Clé API Anthropic (facultatif, modifiable dans les réglages) :"))
+        cl.addWidget(QLabel(f"Clé API {controller.service.settings.provider.capitalize()} "
+                            "(facultatif, modifiable dans les réglages) :"))
         self.api_key = QLineEdit()
         self.api_key.setEchoMode(QLineEdit.EchoMode.Password)
         cl.addWidget(self.api_key)
@@ -157,7 +158,7 @@ class OnboardingWizard(QWizard):
         key = self.api_key.text().strip()
         if key:
             try:
-                save_api_key(key)
+                save_api_key(key, svc.settings.provider)
             except Exception:
                 pass
             svc.settings = replace(svc.settings, api_key=key)

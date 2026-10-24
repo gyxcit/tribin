@@ -41,11 +41,13 @@ est occupé, le fichier revient avec le suffixe `_restaure`.
 Prérequis : [uv](https://docs.astral.sh/uv/) (il installe Python 3.12 si besoin).
 
 ```bash
-uv sync --extra ui
+uv sync --extra ui --extra gemini
 ```
 
-Copier `.env.example` en `.env` et y mettre la clé `ANTHROPIC_API_KEY` (dans l'application, la clé est rangée
-dans le trousseau du système).
+Copier `.env.example` en `.env`, choisir le fournisseur d'IA (`TRIBIN_PROVIDER=anthropic` ou `gemini`) et mettre
+la clé correspondante (`ANTHROPIC_API_KEY` ou `GEMINI_API_KEY`). Pour Gemini, installer aussi le module :
+`uv sync --extra ui --extra gemini`. Dans l'application, le fournisseur se choisit dans Réglages > IA et
+confidentialité, et la clé est rangée dans le trousseau du système.
 
 ```bash
 uv run python scripts/make_sandbox.py

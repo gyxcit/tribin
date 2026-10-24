@@ -8,7 +8,7 @@ from __future__ import annotations
 import getpass
 import logging
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import lru_cache
 from pathlib import Path
 
@@ -16,9 +16,17 @@ from dotenv import load_dotenv
 from platformdirs import user_data_dir
 
 APP_NAME = "TriBin"
-DEFAULT_MODEL = "claude-haiku-5-5"
 KEYRING_SERVICE = "TriBin"
-KEYRING_USERNAME = "anthropic_api_key"
+
+# Fournisseurs d'IA : variables d'environnement de la clé, nom dans le trousseau, modèle par défaut.
+PROVIDERS: dict[str, dict] = {
+    "anthropic": {"env": ("ANTHROPIC_API_KEY",), "keyring": "anthropic_api_key",
+                  "default_model": "claude-haiku-5-5", "prefix": "claude"},
+    "gemini": {"env": ("GEMINI_API_KEY", "GOOGLE_API_KEY"), "keyring": "gemini_api_key",
+               "default_model": "gemini-flash-latest", "prefix": "gemini"},
+}
+DEFAULT_PROVIDER = "anthropic"
+DEFAULT_MODEL = PROVIDERS[DEFAULT_PROVIDER]["default_model"]
 
 # Racine du dépôt quand l'appli tourne depuis les sources (src/tribin/config.py -> dépôt).
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -50,6 +58,7 @@ class Settings:
     model: str
     user: str
     api_key: str | None = field(default=None, repr=False)
+    provider: str = DEFAULT_PROVIDER
 
     @property
     def journal_dir(self) -> Path:
@@ -67,19 +76,37 @@ class Settings:
     def log_path(self) -> Path:
         return self.data_dir / "tribin.log"
 
+    def for_provider(self, provider: str, model: str | None = None) -> Settings:
+        """Réglages pour un autre fournisseur (clé et modèle correspondants)."""
+        if provider not in PROVIDERS:
+            raise ValueError(f"Fournisseur d'IA inconnu : {provider} (possibles : {', '.join(PROVIDERS)})")
+        key = self.api_key if provider == self.provider else read_api_key(provider)
+        return replace(self, provider=provider, api_key=key, model=model_for(provider, model or self.model))
+
     def ensure_dirs(self) -> None:
         """Crée le dossier des données et du journal s'ils n'existent pas."""
         self.journal_dir.mkdir(parents=True, exist_ok=True)
 
 
-def _read_api_key() -> str | None:
-    key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-    if key:
-        return key
+def model_for(provider: str, model: str | None) -> str:
+    """Le modèle demandé s'il correspond au fournisseur, sinon le modèle par défaut de ce fournisseur."""
+    info = PROVIDERS[provider]
+    if model and model.lower().startswith(info["prefix"]):
+        return model
+    return info["default_model"]
+
+
+def read_api_key(provider: str = DEFAULT_PROVIDER) -> str | None:
+    """Clé API du fournisseur : variable d'environnement (.env), sinon trousseau système."""
+    info = PROVIDERS[provider]
+    for name in info["env"]:
+        key = os.environ.get(name, "").strip()
+        if key:
+            return key
     try:
         import keyring
 
-        stored = keyring.get_password(KEYRING_SERVICE, KEYRING_USERNAME)
+        stored = keyring.get_password(KEYRING_SERVICE, info["keyring"])
         return stored or None
     except Exception:  # trousseau indisponible : pas bloquant
         return None
@@ -94,13 +121,17 @@ def load_settings(env_file: Path | None = None) -> Settings:
         default_user = getpass.getuser()
     except Exception:
         default_user = "utilisateur"
+    provider = os.environ.get("TRIBIN_PROVIDER", "").strip().lower() or DEFAULT_PROVIDER
+    if provider not in PROVIDERS:
+        provider = DEFAULT_PROVIDER
     return Settings(
         dev_sandbox=_env_bool("TRIBIN_DEV_SANDBOX", default=True),
         sandbox_dir=sandbox_dir.resolve(),
         data_dir=data_dir,
-        model=os.environ.get("TRIBIN_MODEL", "").strip() or DEFAULT_MODEL,
+        model=model_for(provider, os.environ.get("TRIBIN_MODEL", "").strip()),
         user=os.environ.get("TRIBIN_USER", "").strip() or default_user,
-        api_key=_read_api_key(),
+        api_key=read_api_key(provider),
+        provider=provider,
     )
 
 
@@ -110,11 +141,11 @@ def get_settings() -> Settings:
     return load_settings()
 
 
-def save_api_key(key: str) -> None:
-    """Enregistre la clé API dans le trousseau système."""
+def save_api_key(key: str, provider: str = DEFAULT_PROVIDER) -> None:
+    """Enregistre la clé API du fournisseur dans le trousseau système."""
     import keyring
 
-    keyring.set_password(KEYRING_SERVICE, KEYRING_USERNAME, key)
+    keyring.set_password(KEYRING_SERVICE, PROVIDERS[provider]["keyring"], key)
 
 
 def is_within(path: Path, parent: Path) -> bool:

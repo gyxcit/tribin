@@ -37,7 +37,9 @@ from tribin.ui import system_integration
 if TYPE_CHECKING:
     from tribin.ui.app import AppController
 
-MODELS = ["claude-haiku-5-5", "claude-sonnet-5-5"]
+MODELS = {"anthropic": ["claude-haiku-5-5", "claude-sonnet-5-5"],
+          "gemini": ["gemini-flash-latest", "gemini-flash-lite-latest", "gemini-pro-latest"]}
+PROVIDER_LABELS = {"anthropic": "Anthropic (Claude)", "gemini": "Google (Gemini)"}
 
 
 def path_list(items: list[str]) -> tuple[QWidget, QListWidget]:
@@ -120,15 +122,21 @@ class SettingsDialog(QDialog):
 
         ai = QWidget()
         af = QFormLayout(ai)
+        ai_settings = svc.ai_settings()
+        self.provider = QComboBox()
+        for key, label in PROVIDER_LABELS.items():
+            self.provider.addItem(label, key)
+        self.provider.setCurrentIndex(list(PROVIDER_LABELS).index(ai_settings.provider))
+        af.addRow("Fournisseur d'IA", self.provider)
         self.model = QComboBox()
         self.model.setEditable(True)
-        self.model.addItems(MODELS)
-        self.model.setCurrentText(cfg.model or svc.settings.model)
         af.addRow("Modèle d'IA", self.model)
         self.api_key = QLineEdit()
         self.api_key.setEchoMode(QLineEdit.EchoMode.Password)
-        self.api_key.setPlaceholderText("déjà enregistrée" if svc.settings.api_key else "sk-ant-…")
-        af.addRow("Clé API Anthropic (trousseau système)", self.api_key)
+        af.addRow("Clé API (trousseau système)", self.api_key)
+        self.provider.currentIndexChanged.connect(self._provider_changed)
+        self._provider_changed()
+        self.model.setCurrentText(cfg.model or ai_settings.model)
         notice = QLabel(PRIVACY_NOTICE)
         notice.setWordWrap(True)
         af.addRow(notice)
@@ -156,6 +164,13 @@ class SettingsDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(tabs)
         layout.addWidget(buttons)
+
+    def _provider_changed(self) -> None:
+        provider = self.provider.currentData()
+        self.model.clear()
+        self.model.addItems(MODELS[provider])
+        has_key = bool(self.c.service.settings.for_provider(provider).api_key)
+        self.api_key.setPlaceholderText("déjà enregistrée" if has_key else ("sk-ant-…" if provider == "anthropic" else "clé Gemini"))
 
     def _browse_convention(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "Fichier de convention", self.convention.text(), "YAML (*.yaml *.yml)")
@@ -193,14 +208,16 @@ class SettingsDialog(QDialog):
         cfg.roots = [self.roots.item(i).text() for i in range(self.roots.count())]
         cfg.local_excluded = [line.strip() for line in self.excluded.toPlainText().splitlines() if line.strip()]
         cfg.convention_path = self.convention.text().strip()
+        provider = self.provider.currentData()
+        cfg.provider = provider
         cfg.model = self.model.currentText().strip()
         key = self.api_key.text().strip()
         if key:
             try:
-                save_api_key(key)
+                save_api_key(key, provider)
             except Exception as exc:
                 QMessageBox.warning(self, "TriBin", f"Trousseau indisponible ({exc}) : clé utilisée pour cette session.")
-            svc.settings = replace(svc.settings, api_key=key)
+            svc.settings = replace(svc.settings.for_provider(provider), api_key=key)
         save_profile(svc.settings.profile_path, self.profile.toPlainText())
         svc.update_config(cfg)
         self.accept()

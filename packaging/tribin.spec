@@ -15,6 +15,10 @@ SRC = HERE.parent / "src"
 datas = collect_data_files("tribin") + collect_data_files("docx") + collect_data_files("pptx")
 binaries = []
 hiddenimports = collect_submodules("tribin")
+try:  # fournisseur Gemini (facultatif)
+    hiddenimports += collect_submodules("google.genai")
+except Exception:
+    pass
 for package in ("pypdfium2", "pypdfium2_raw", "psd_tools"):
     d, b, h = collect_all(package)
     datas += d

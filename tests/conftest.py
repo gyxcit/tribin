@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -11,6 +12,28 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from tribin.config import Settings  # noqa: E402
+
+
+ENV_VARS = ("TRIBIN_PROVIDER", "TRIBIN_MODEL", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY",
+            "TRIBIN_DEV_SANDBOX", "TRIBIN_DATA_DIR", "TRIBIN_SANDBOX_DIR", "TRIBIN_USER")
+
+
+@pytest.fixture(autouse=True)
+def isolated_env(monkeypatch):
+    """Les tests ne lisent ni le fichier .env du développeur, ni ses variables, ni son trousseau."""
+    import tribin.config as cfg
+
+    for name in ENV_VARS:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(cfg, "load_dotenv", lambda *a, **k: False)
+    def env_only(provider: str = cfg.DEFAULT_PROVIDER):
+        info = cfg.PROVIDERS[provider]
+        return next((os.environ[n] for n in info["env"] if os.environ.get(n)), None)
+
+    monkeypatch.setattr(cfg, "read_api_key", env_only)
+    cfg.get_settings.cache_clear()
+    yield
+    cfg.get_settings.cache_clear()
 
 
 @pytest.fixture

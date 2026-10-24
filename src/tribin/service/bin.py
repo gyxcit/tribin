@@ -113,6 +113,13 @@ class BinService:
                 self._contexts.clear()
             return self._convention[2]
 
+    def ai_settings(self) -> Settings:
+        """Réglages du fournisseur d'IA choisi dans l'application (sinon celui du fichier .env)."""
+        cfg = self.config
+        if cfg.provider and cfg.provider != self.settings.provider:
+            return self.settings.for_provider(cfg.provider, cfg.model or None)
+        return self.settings
+
     def excluded(self) -> list[str]:
         return [*self.convention().excluded_paths, *self.config.local_excluded]
 
@@ -142,10 +149,11 @@ class BinService:
         key = str(Path(root).resolve())
         with self._lock:
             if key not in self._contexts:
+                settings = self.ai_settings()
                 try:
-                    llm = self._provider_factory(self.settings, self.config.model or None)
+                    llm = self._provider_factory(settings, self.config.model or None)
                 except LLMError as exc:
-                    llm = _NoLLM(str(exc), self.config.model or self.settings.model)
+                    llm = _NoLLM(str(exc), settings.model)
                 self._contexts[key] = make_context(Path(root), self.convention(), llm, self.settings, self.db)
             return self._contexts[key]
 
