@@ -40,13 +40,13 @@ possibilités. Les actions sont en bas : « Ranger ici » (Entrée), « Passer �
 - **Travail** : les fichiers d'une équipe, par client / année / projet / catégorie selon la convention partagée ;
   TriBin n'invente jamais de catégorie et demande toujours avant de créer un dossier.
 
-| 1. Bienvenue | 2. Vos dossiers |
+| 1. Bienvenue | 2. Utilisation (personnel ou travail) |
 |---|---|
-| ![Bienvenue](docs/screenshots/onboarding.png) | ![Vos dossiers](docs/screenshots/onboarding-2.png) |
+| ![Bienvenue](docs/screenshots/onboarding.png) | ![Utilisation](docs/screenshots/onboarding-2.png) |
 
-| 3. Votre activité | 4. Intelligence artificielle |
-|---|---|
-| ![Questions](docs/screenshots/onboarding-3.png) | ![IA](docs/screenshots/onboarding-4.png) |
+| 3. Vos dossiers | 4. Votre activité (mode travail) | 5. Intelligence artificielle |
+|---|---|---|
+| ![Vos dossiers](docs/screenshots/onboarding-3.png) | ![Questions](docs/screenshots/onboarding-4.png) | ![IA](docs/screenshots/onboarding-5.png) |
 
 | Réglages › Dossiers | Réglages › Intelligence artificielle |
 |---|---|
