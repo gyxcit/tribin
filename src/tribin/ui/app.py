@@ -277,7 +277,7 @@ def main(argv: list[str] | None = None) -> int:
     controller = AppController(app)
     app.controller = controller
     server = _listen(controller)  # noqa: F841 — doit rester en vie
-    if not controller.service.config.onboarding_done:
+    if not controller.service.config.onboarding_done or "--onboarding" in argv:  # --onboarding : le revoir
         from tribin.ui.onboarding import OnboardingWizard
 
         if not OnboardingWizard(controller).exec():
