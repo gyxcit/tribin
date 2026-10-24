@@ -28,13 +28,13 @@ def make_provider(settings: Settings, model: str | None = None, provider: str | 
         try:
             from tribin.llm.mistral_provider import MistralProvider
         except ImportError as exc:
-            raise LLMError("Le module Mistral n'est pas installé : lance « uv sync --extra mistral ».") from exc
+            raise LLMError("Le module Mistral est absent de cette installation de TriBin : réinstallez TriBin (ou « uv sync » depuis les sources).") from exc
         return MistralProvider(api_key=settings.api_key, model=settings.model)
     if name == "gemini":
         try:
             from tribin.llm.gemini_provider import GeminiProvider
         except ImportError as exc:
-            raise LLMError("Le module Gemini n'est pas installé : lance « uv sync --extra gemini ».") from exc
+            raise LLMError("Le module Gemini est absent de cette installation de TriBin : réinstallez TriBin (ou « uv sync » depuis les sources).") from exc
         return GeminiProvider(api_key=settings.api_key, model=settings.model)
     from tribin.llm.anthropic_provider import AnthropicProvider
 

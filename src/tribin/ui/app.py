@@ -236,7 +236,13 @@ class AppController:
         from tribin.ui.settings import SettingsDialog
 
         if SettingsDialog(self).exec():
+            self.retry_without_ai()
             self.refresh_queue()
+
+    def retry_without_ai(self) -> None:
+        """Nouvelle clé ou nouveau fournisseur : relance l'analyse des fichiers « à traiter à la main »."""
+        for file_id in self.service.retry_without_ai():
+            self._analyze(file_id)
 
     def set_drop_widget_visible(self, visible: bool) -> None:
         self.drop_widget.setVisible(visible)

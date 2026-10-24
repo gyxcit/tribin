@@ -146,3 +146,23 @@ def test_auto_file_never_creates_folders(settings, sb):
     assert not report.done and report.left[0][1] == "un nouveau dossier serait créé"
     assert [i.file_id for i in svc.pending()] == [item.file_id]
     assert not (sb / "root" / "ACME" / "2027").exists()
+
+
+def test_files_without_ai_are_reanalyzed_after_adding_a_key(settings, sb):
+    state = {"key": None}
+    good = fixed(target_folder=f"{NOEL}/06_Admin", description="Devis", confidence=0.9)
+
+    def factory(settings, model=None):
+        if not state["key"]:
+            raise LLMError("Clé API manquante")
+        return good
+
+    svc = service(settings, sb, factory=factory)
+    item = svc.analyze(svc.drop(sb / "inbox" / "scan0042.pdf").file_id)
+    assert item.proposal.manual
+    state["key"] = "nouvelle-cle"
+    svc.update_config(svc.config)  # enregistrement des réglages : les contextes d'IA sont recréés
+    assert svc.retry_without_ai() == [item.file_id] and svc.queue.get(item.file_id).status == "analyzing"
+    item = svc.analyze(item.file_id)
+    assert not item.proposal.manual and item.proposal.target_folder == f"{NOEL}/06_Admin"
+    assert svc.retry_without_ai() == []

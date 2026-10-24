@@ -84,12 +84,12 @@ est occupé, le fichier revient avec le suffixe `_restaure`.
 Prérequis : [uv](https://docs.astral.sh/uv/) (il installe Python 3.12 si besoin).
 
 ```bash
-uv sync --extra ui --extra gemini --extra mistral
+uv sync
 ```
 
 Copier `.env.example` en `.env`, choisir le fournisseur d'IA (`TRIBIN_PROVIDER=anthropic`, `gemini` ou `mistral`) et mettre
 la clé correspondante (`ANTHROPIC_API_KEY`, `GEMINI_API_KEY` ou `MISTRAL_API_KEY`). Pour Gemini et Mistral, installer
-aussi leur module : `uv sync --extra ui --extra gemini --extra mistral`. Dans l'application, le fournisseur se choisit dans Réglages › Intelligence
+aussi leur module : `uv sync`. Dans l'application, le fournisseur se choisit dans Réglages › Intelligence
 artificielle, et la clé est rangée dans le trousseau du système.
 
 ```bash
@@ -151,7 +151,7 @@ Objectif avant usage réel : au moins 70 % de dossiers corrects sur la sandbox.
 ## Empaquetage (test du dépôt sur l'icône)
 
 ```bash
-uv sync --extra ui --extra packaging
+uv sync --extra packaging
 ```
 
 ```bash

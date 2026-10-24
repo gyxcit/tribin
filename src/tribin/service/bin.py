@@ -220,6 +220,17 @@ class BinService:
     def pending(self) -> list[QueueItem]:
         return self.queue.active()
 
+    def retry_without_ai(self) -> list[str]:
+        """Fichiers restés sans proposition de l'IA (clé absente, module manquant, erreur) : à réanalyser.
+
+        Appelé après un changement de clé ou de fournisseur ; les fichiers repassent « en analyse »."""
+        ids = []
+        for item in self.pending():
+            if item.status == "error" or (item.status == "ready" and item.proposal and item.proposal.manual):
+                self.queue.set_status(item.file_id, "analyzing")
+                ids.append(item.file_id)
+        return ids
+
     def recover(self) -> list[QueueItem]:
         """Au lancement : fichiers dont l'analyse a été interrompue (à relancer)."""
         return [i for i in self.queue.active() if i.status == "analyzing" or (i.status == "ready" and not i.proposal)]

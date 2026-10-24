@@ -2267,8 +2267,10 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "anthropic" },
+    { name = "google-genai" },
     { name = "imagehash" },
     { name = "keyring" },
+    { name = "mistralai" },
     { name = "openpyxl" },
     { name = "pillow" },
     { name = "platformdirs" },
@@ -2276,6 +2278,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "pypdf" },
     { name = "pypdfium2" },
+    { name = "pyside6-essentials" },
     { name = "python-docx" },
     { name = "python-dotenv" },
     { name = "python-pptx" },
@@ -2285,17 +2288,8 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-gemini = [
-    { name = "google-genai" },
-]
-mistral = [
-    { name = "mistralai" },
-]
 packaging = [
     { name = "pyinstaller" },
-]
-ui = [
-    { name = "pyside6-essentials" },
 ]
 
 [package.dev-dependencies]
@@ -2306,10 +2300,10 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "anthropic", specifier = ">=0.40" },
-    { name = "google-genai", marker = "extra == 'gemini'", specifier = ">=1.0" },
+    { name = "google-genai", specifier = ">=1.0" },
     { name = "imagehash", specifier = ">=4.3" },
     { name = "keyring", specifier = ">=24.0" },
-    { name = "mistralai", marker = "extra == 'mistral'", specifier = ">=1.0" },
+    { name = "mistralai", specifier = ">=1.0" },
     { name = "openpyxl", specifier = ">=3.1" },
     { name = "pillow", specifier = ">=10.1" },
     { name = "platformdirs", specifier = ">=4.0" },
@@ -2318,7 +2312,7 @@ requires-dist = [
     { name = "pyinstaller", marker = "extra == 'packaging'", specifier = ">=6.0" },
     { name = "pypdf", specifier = ">=4.0" },
     { name = "pypdfium2", specifier = ">=4.0" },
-    { name = "pyside6-essentials", marker = "extra == 'ui'", specifier = ">=6.6" },
+    { name = "pyside6-essentials", specifier = ">=6.6" },
     { name = "python-docx", specifier = ">=1.1" },
     { name = "python-dotenv", specifier = ">=1.0" },
     { name = "python-pptx", specifier = ">=0.6.23" },
@@ -2326,7 +2320,7 @@ requires-dist = [
     { name = "rapidfuzz", specifier = ">=3.0" },
     { name = "rich", specifier = ">=13.0" },
 ]
-provides-extras = ["ui", "packaging", "gemini", "mistral"]
+provides-extras = ["packaging", "ui", "gemini", "mistral"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = ">=8.0" }]

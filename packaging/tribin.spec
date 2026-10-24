@@ -1,13 +1,13 @@
 # -*- mode: python ; coding: utf-8 -*-
 # Empaquetage minimal, sans signature (phase 4) :
-#   uv sync --extra ui --extra packaging
+#   uv sync --extra packaging
 #   uv run python scripts/make_icons.py
 #   uv run pyinstaller packaging/tribin.spec --noconfirm
 # Résultat : dist/TriBin/TriBin.exe (Windows) ou dist/TriBin.app (macOS).
 import sys
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_submodules, copy_metadata
 
 HERE = Path(SPECPATH)
 SRC = HERE.parent / "src"
@@ -15,11 +15,13 @@ SRC = HERE.parent / "src"
 datas = collect_data_files("tribin") + collect_data_files("docx") + collect_data_files("pptx")
 binaries = []
 hiddenimports = collect_submodules("tribin")
-for optional in ("google.genai", "mistralai"):  # fournisseurs Gemini et Mistral (facultatifs)
-    try:
-        hiddenimports += collect_submodules(optional)
-    except Exception:
-        pass
+# Fournisseurs Gemini et Mistral : obligatoires (un .exe sans eux afficherait « module absent »).
+hiddenimports += collect_submodules("google.genai") + collect_submodules("mistralai")
+# Trousseau du système (clé API) : backends chargés dynamiquement, à embarquer explicitement.
+hiddenimports += collect_submodules("keyring")
+datas += copy_metadata("keyring")
+if sys.platform == "win32":
+    hiddenimports += collect_submodules("win32ctypes")
 for package in ("pypdfium2", "pypdfium2_raw", "psd_tools"):
     d, b, h = collect_all(package)
     datas += d

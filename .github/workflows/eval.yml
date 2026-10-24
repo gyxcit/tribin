@@ -40,7 +40,7 @@ jobs:
             echo "::error::Secret $name absent : ajoute-le dans Settings > Secrets and variables > Actions."
             exit 1
           fi
-      - run: uv sync --extra gemini --extra mistral
+      - run: uv sync
       - run: uv run python scripts/make_sandbox.py
       - name: Évaluer
         env:
