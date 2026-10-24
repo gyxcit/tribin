@@ -851,7 +851,7 @@ Indicateur principal en usage réel : **taux de propositions acceptées sans mod
 - [x] Phase 1 — Proposition en ligne de commande, sans déplacement (score réel à mesurer avec une clé API)
 - [x] Phase 2 — Convention et cartographie
 - [x] Phase 3 — Exécution sécurisée, journal, annulation
-- [x] Phase 4 — Application de bureau « Corbeille » (vérifié sous Windows ; reste à vérifier à la main sous macOS)
+- [x] Phase 4 — Application de bureau « Corbeille » (test de fumée de l'appli empaquetée OK en CI sur macOS et Windows ; dépôt à la souris sur le Dock à vérifier à la main sur un Mac)
 - [x] Phase 5 — Apprentissage
 - [x] Phase 6 — Versions
 
@@ -866,6 +866,7 @@ Indicateur principal en usage réel : **taux de propositions acceptées sans mod
 | 2026-10-24 | 4 | service/ (dépôt, file d'attente SQLite, analyse, validation, renvoi), ui/ PySide6 (barre système avec compteur, widget flottant, Corbeille, Historique, Réglages, onboarding, instance unique, QFileOpenEvent, Envoyer vers), empaquetage PyInstaller (.exe testé : instance unique + fichier en argument) | — | Phase 5 |
 | 2026-10-24 | 5 | learning/ : corrections (décision, champs modifiés, conformité à la convention), 5 exemples similaires dans le prompt, signal implicite (déplacement manuel sous 14 jours), règles résumées toutes les 20 corrections (modifiables, supprimables), alerte « règle d'équipe souvent corrigée » | — | Phase 6 |
 | 2026-10-24 | 6 | versions/detector.py : nom de base normalisé, familles d'extensions, similarité ≥ 85, hash perceptuel ≤ 10 pour les images, numéro suivant, anciennes versions vers _versions/ dans le même lot (simulation + annulation) ; README complet | non mesuré (pas de clé API) | Mesurer l'éval avec une clé ; vérifs manuelles macOS |
+| 2026-10-24 | CI | Dépôt GitHub privé gyxcit/tribin ; CI de tests au vert sur macOS et Windows (202 tests sous Windows) ; CI d'empaquetage : .exe et .app construits et testés (instance unique, fichier reçu, déposé, analysé ; CFBundleDocumentTypes vérifié). Bug corrigé : ordre d'annulation quand deux opérations partagent la même milliseconde | non mesuré (pas de clé API) | Lancer l'éval avec une clé ; essai manuel sur un Mac |
 
 ---
 
