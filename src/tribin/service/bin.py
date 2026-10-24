@@ -16,6 +16,8 @@ from tribin.extract import extract
 from tribin.fs.filters import ExclusionMatcher, NotProcessable, check_processable
 from tribin.ids import new_id
 from tribin.llm import make_provider
+from tribin.learning.corrections import record_correction
+from tribin.learning.signals import check_moved_files, maybe_summarize, remember_placement
 from tribin.llm.base import LLMError, Usage
 from tribin.safety import restore
 from tribin.safety.executor import ExecutionReport, Executor, SimulationReport
@@ -223,7 +225,28 @@ class BinService:
         return result
 
     def _after_placement(self, v: Validation, op) -> None:
-        """Point d'accroche de l'apprentissage (phase 5)."""
+        """Apprentissage : enregistre la décision, mémorise l'emplacement (signal implicite), résume les règles."""
+        item = self.queue.get(v.file_id)
+        if not item or not item.proposal:
+            return
+        try:
+            convention = self.convention()
+            original = Path(item.original_path).name
+            record_correction(self.db, convention, original, item.proposal.excerpt, item.proposal.client_hint,
+                              item.proposal, v.target_folder, op.destination.name, v.decision)
+            remember_placement(self.db, op.operation_id, op.destination, Path(item.root), v.target_folder,
+                               op.destination.name, original, item.proposal.client_hint)
+            if v.decision != "accepted":
+                maybe_summarize(self.db, self.context(Path(item.root)).llm)
+        except Exception:
+            log.exception("learning hook failed")
+
+    def check_implicit_corrections(self) -> int:
+        """Au lancement : fichiers rangés par TriBin puis déplacés à la main (14 jours)."""
+        try:
+            return check_moved_files(self.db, self.convention())
+        except BinError:
+            return 0
 
     def return_to_origin(self, file_id: str) -> str:
         """Renvoie le fichier à son emplacement d'origine (= annulation de l'opération « stage »)."""
@@ -235,4 +258,10 @@ class BinService:
         if not done:
             raise BinError(results[0]["message"] if results else "Annulation impossible.")
         self.queue.set_status(file_id, "returned")
+        if item.proposal and not item.proposal.manual:
+            try:
+                record_correction(self.db, self.convention(), Path(item.original_path).name, item.proposal.excerpt,
+                                  item.proposal.client_hint, item.proposal, "", "", "rejected")
+            except Exception:
+                log.exception("could not record rejection")
         return done[0]["message"] or "Fichier renvoyé à son emplacement d'origine."

@@ -206,6 +206,7 @@ class AppController:
     def start(self, initial_paths: list[Path]) -> None:
         """Après l'onboarding : reprend les analyses interrompues puis traite les fichiers reçus au lancement."""
         self.refresh_queue()
+        self._run(self.service.check_implicit_corrections)
         for item in self.service.recover():
             self._analyze(item.file_id)
         if initial_paths:

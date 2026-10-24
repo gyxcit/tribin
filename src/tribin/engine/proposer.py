@@ -38,6 +38,7 @@ class ProposeContext:
     client_detector: Callable[[FileInfo], str | None] | None = None
     examples_provider: Callable[[FileInfo, str | None], list[str]] | None = None
     version_detector: Callable[[FileInfo, Proposal, ProposeContext], None] | None = None
+    rules_provider: Callable[[], list[str]] | None = None
     _phase1_cache: list[Candidate] | None = None
 
     def candidates(self, info: FileInfo, client_hint: str | None) -> list[Candidate]:
@@ -97,7 +98,7 @@ def build_prompt_data(info: FileInfo, ctx: ProposeContext, hint: str | None, can
         origin_folder=info.origin_folder,
         extracted_text=info.text,
         profile=ctx.profile,
-        learned_rules=ctx.learned_rules,
+        learned_rules=ctx.rules_provider() if ctx.rules_provider else ctx.learned_rules,
         candidate_folders=[c.render() for c in candidates],
         correction_examples=examples,
         client_hint=hint or "",
@@ -213,6 +214,7 @@ def propose(info: FileInfo, ctx: ProposeContext) -> Proposal:
             ctx.version_detector(info, proposal, ctx)
         except Exception:
             log.exception("version detection failed for %s", info.path)
+    proposal.client_hint, proposal.excerpt = hint, info.text[:300]
     proposal.cost_usd = getattr(getattr(ctx.llm, "last_usage", None), "cost_usd", 0.0)
     proposal.duration_s = round(time.monotonic() - started, 2)
     return proposal

@@ -61,6 +61,8 @@ class Proposal(BaseModel):
     prompt_version: str
     model: str
     manual: bool = False  # True : échec de l'IA, « à traiter manuellement »
+    client_hint: str | None = None
+    excerpt: str = ""  # début du contenu extrait (apprentissage)
     cost_usd: float = 0.0
     duration_s: float = 0.0
 

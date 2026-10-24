@@ -103,7 +103,25 @@ def cmd_file(args: argparse.Namespace) -> int:
         return 0
     result = executor.execute(batch.ops)
     _print_result(result.operations, batch.id)
+    move = next((op for op in result.operations if op.action == "move" and op.status == "done"), None)
+    if move is not None:
+        _learn(ctx, args.file.name, proposal, folder, move, decision)
     return 0 if not result.failed else 1
+
+
+def _learn(ctx, original_name: str, proposal: Proposal, folder: str, move, decision: str) -> None:
+    """Apprentissage : la décision devient une correction ; l'emplacement est mémorisé (signal implicite)."""
+    from tribin.db import Database
+    from tribin.learning.corrections import record_correction
+    from tribin.learning.signals import maybe_summarize, remember_placement
+
+    db = Database(get_settings().db_path)
+    record_correction(db, ctx.convention, original_name, proposal.excerpt, proposal.client_hint, proposal, folder,
+                      move.destination.name, decision)
+    remember_placement(db, move.operation_id, move.destination, ctx.root, folder, move.destination.name,
+                       original_name, proposal.client_hint)
+    if decision != "accepted":
+        maybe_summarize(db, ctx.llm) if not result.failed else 1
 
 
 def _print_result(operations, batch_id: str) -> None:

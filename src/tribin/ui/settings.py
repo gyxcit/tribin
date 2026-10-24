@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
 )
 
 from tribin.config import save_api_key
+from tribin.learning.corrections import team_rule_alerts
 from tribin.learning.rules_store import delete_rule, list_rules, update_rule
 from tribin.service.profile import PRIVACY_NOTICE, save_profile
 from tribin.ui import system_integration
@@ -108,6 +109,12 @@ class SettingsDialog(QDialog):
         del_rule = QPushButton("Supprimer la règle")
         del_rule.clicked.connect(self._delete_rule)
         pl.addWidget(del_rule)
+        alerts = team_rule_alerts(svc.db)
+        if alerts:
+            warning = QLabel("\n".join(alerts) + "\nPense à en parler au référent des conventions.")
+            warning.setWordWrap(True)
+            warning.setStyleSheet("color: #b7791f;")
+            pl.addWidget(warning)
         self._load_rules()
         tabs.addTab(profile_tab, "Profil et apprentissage")
 

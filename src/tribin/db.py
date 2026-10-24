@@ -66,6 +66,10 @@ CREATE TABLE IF NOT EXISTS placed_files (
     path TEXT NOT NULL,
     size INTEGER NOT NULL,
     root TEXT NOT NULL,
+    folder TEXT NOT NULL,
+    name TEXT NOT NULL,
+    original_name TEXT NOT NULL,
+    client_hint TEXT,
     placed_at TEXT NOT NULL,
     checked INTEGER NOT NULL DEFAULT 0
 );
