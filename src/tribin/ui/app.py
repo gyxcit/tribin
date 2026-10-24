@@ -77,8 +77,9 @@ class AppController:
         if show_ui:
             self.tray.show()
             screen = app.primaryScreen().availableGeometry()
-            self.drop_widget.move(screen.right() - 140, screen.bottom() - 180)
+            self.drop_widget.move(screen.right() - 260, screen.bottom() - 220)
             self.drop_widget.show()
+            self.drop_widget.keep_on_screen()
 
     # --- utilitaires --------------------------------------------------------------------------
 
@@ -272,6 +273,7 @@ class AppController:
         """Après l'onboarding : reprend les analyses interrompues puis traite les fichiers reçus au lancement."""
         self.refresh_queue()
         self._run(self.service.check_implicit_corrections)
+        self.service.retry_without_ai()  # analyses restées sans IA (clé ou module absent la dernière fois)
         for item in self.service.recover():
             self._analyze(item.file_id)
         if initial_paths:

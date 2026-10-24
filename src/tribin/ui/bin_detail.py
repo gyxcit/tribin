@@ -260,6 +260,7 @@ class DetailPanel(QFrame):
         index = self.category.findData(current)
         self.category.setCurrentIndex(index)
         self.category.setEnabled(index >= 0 and self.name.isEnabled())
+        self.validate_button.setEnabled(self.name.isEnabled() and bool(parts))  # pas de dossier : rien à ranger
         self._changed()
 
     def focus_name(self) -> None:

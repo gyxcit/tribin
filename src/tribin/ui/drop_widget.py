@@ -185,6 +185,18 @@ class DropWidget(QWidget):
         self.stack.setCurrentWidget(card)
         self.stack.setFixedSize(card.sizeHint().expandedTo(card.minimumSize()))
         self.adjustSize()
+        self.keep_on_screen()
+
+    def keep_on_screen(self) -> None:
+        """La carte change de taille selon l'état : elle ne doit jamais dépasser du bord de l'écran."""
+        screen = self.screen()
+        if screen is None or not self.isVisible():
+            return
+        area = screen.availableGeometry()
+        x = max(area.left() + 8, min(self.x(), area.right() - self.width() - 8))
+        y = max(area.top() + 8, min(self.y(), area.bottom() - self.height() - 8))
+        if (x, y) != (self.x(), self.y()):
+            self.move(x, y)
 
     # --- glisser-déposer ----------------------------------------------------------------------
 

@@ -362,3 +362,47 @@ def test_refresh_button_and_reanalyze(qapp, controller):
     win.select_file(svc.pending()[0].file_id)
     win.detail.reanalyze_button.click()
     assert wait(qapp, lambda: ready_items(controller, 1) and svc.pending()[0].proposal is not None)
+
+
+def test_startup_retries_files_left_without_ai(qapp, controller):
+    from tribin.llm.base import LLMError
+
+    svc = controller.service
+    working = svc._provider_factory
+
+    def missing_module(settings, model=None):
+        raise LLMError("Le module Mistral est absent")
+
+    svc._provider_factory = missing_module
+    svc.reload()
+    item = svc.analyze(svc.drop(controller.sb / "inbox" / "scan0042.pdf").file_id)
+    assert item.proposal.manual
+    svc._provider_factory = working  # nouvelle version de l'appli, module présent
+    svc.reload()
+    controller.start([])
+    assert wait(qapp, lambda: ready_items(controller, 1) and not svc.pending()[0].proposal.manual)
+
+
+def test_widget_stays_on_screen_and_no_folder_means_no_ranging(qapp, controller):
+    widget = controller.drop_widget
+    widget.show()
+    area = widget.screen().availableGeometry()
+    widget.move(area.right() - 20, area.bottom() - 20)
+    widget.set_state(total=3, ready=2, check=1)
+    assert widget.geometry().right() <= area.right() and widget.geometry().bottom() <= area.bottom()
+    widget.hide()
+
+    from tribin.llm.base import LLMError
+
+    def no_key(settings, model=None):
+        raise LLMError("Clé API manquante")
+
+    controller.service._provider_factory = no_key
+    controller.service.reload()
+    controller.drop_paths([controller.sb / "inbox" / "scan0042.pdf"])
+    assert wait(qapp, lambda: any(i.status == "ready" for i in controller.service.pending()))
+    controller.refresh_queue()
+    detail = controller.bin_window.detail
+    assert detail.folder == "" and not detail.validate_button.isEnabled()
+    detail.set_folder(f"{NOEL}/06_Admin")  # dossier choisi à la main
+    assert detail.validate_button.isEnabled()
