@@ -476,3 +476,33 @@ def test_personal_mode_in_onboarding_and_settings(qapp, controller, monkeypatch)
     dialog.mode_cards["work"].radio.setChecked(True)
     dialog._save()
     assert not controller.service.convention().personal
+
+
+def test_history_reveal_button(qapp, controller, monkeypatch):
+    import tribin.ui.history as history_module
+
+    shown = []
+    monkeypatch.setattr(history_module, "reveal", lambda path: shown.append(Path(path)))
+    controller.drop_paths([controller.sb / "inbox" / "scan0042.pdf"])
+    assert wait(qapp, lambda: ready_items(controller, 1))
+    controller.refresh_queue()
+    controller.bin_window.validate_selected()
+    placed = controller.sb / "root" / NOEL / "06_Admin" / "2026-10-12_ACME_2026-042_Devis-impression.pdf"
+    assert wait(qapp, placed.exists)
+    history = controller.bin_window.history
+    controller.bin_window.show_page("history")
+    buttons = [b for b in history.findChildren(QPushButton) if b.text() == "Afficher" and b.isEnabled()]
+    assert buttons
+    for button in buttons:
+        button.click()
+    assert placed in shown  # le fichier rangé, sélectionné dans l'Explorateur
+
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    next(b for b in history.findChildren(QPushButton) if "Annuler le lot" in b.text()).click()
+    shown.clear()
+    qapp.processEvents()  # anciens boutons (avant l'annulation) détruits
+    for button in [b for b in history.findChildren(QPushButton)
+                   if b.text() == "Afficher" and b.isEnabled() and b.isVisibleTo(history)]:
+        button.click()
+    assert placed not in shown and any(p.name == "2026-10-12_ACME_2026-042_Devis-impression.pdf" or
+                                       p.name == "scan0042.pdf" for p in shown)  # là où il est revenu

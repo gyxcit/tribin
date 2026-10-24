@@ -53,3 +53,34 @@ def install_desktop_shortcut() -> Path:
         return link
     _create_shortcut(link, *app_command())
     return link
+
+
+# --- afficher un fichier dans l'Explorateur / le Finder -------------------------------------------
+
+FILE_MANAGER = "le Finder" if sys.platform == "darwin" else "l'Explorateur"
+
+
+def reveal_target(*candidates: str | Path | None) -> Path | None:
+    """Premier chemin existant parmi `candidates` ; à défaut, le premier dossier parent qui existe."""
+    paths = [Path(c) for c in candidates if c]
+    for path in paths:
+        if path.exists():
+            return path
+    for path in paths:
+        if path.parent.exists():
+            return path.parent
+    return None
+
+
+def reveal(path: Path) -> None:
+    """Ouvre l'Explorateur (Windows) ou le Finder (macOS) avec le fichier sélectionné ; un dossier est ouvert."""
+    path = Path(path)
+    if path.is_file() and sys.platform == "win32":
+        subprocess.Popen(f'explorer /select,"{path}"')  # chaîne : explorer exige « /select,"chemin" » tel quel
+    elif path.is_file() and sys.platform == "darwin":
+        subprocess.Popen(["open", "-R", str(path)])
+    else:
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(path if path.is_dir() else path.parent)))

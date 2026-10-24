@@ -23,6 +23,8 @@ from PySide6.QtWidgets import (
 from tribin.config import STAGING_DIRNAME
 from tribin.safety.journal import Journal
 from tribin.ui.components import elided, section
+from tribin.ui.icons import line_icon
+from tribin.ui.system_integration import FILE_MANAGER, reveal, reveal_target
 from tribin.ui.theme import BORDER, CORAL, FAINT, TEAL, mono_font
 
 if TYPE_CHECKING:
@@ -315,6 +317,7 @@ class HistoryView(QWidget):
             note.setText(elided(hint, note, 230))
             note.setToolTip(hint)
             line.addWidget(note)
+        line.addWidget(self._reveal_button(op))
         if op.get("status") == "done" and op.get("action") in REVERSIBLE:
             undo = QPushButton("Annuler")
             undo.setObjectName("Link")
@@ -322,6 +325,24 @@ class HistoryView(QWidget):
             undo.clicked.connect(lambda _=False, o=op["operation_id"]: self._undo(operation_id=o))
             line.addWidget(undo)
         return row
+
+    @staticmethod
+    def _reveal_button(op: dict) -> QPushButton:
+        """« Afficher » : ouvre l'Explorateur sur le fichier (là où il est maintenant : à destination, ou revenu à
+        son emplacement d'origine après une annulation)."""
+        undone = op.get("status") == "undone"
+        first, second = (op.get("source"), op.get("destination")) if undone else (op.get("destination"), op.get("source"))
+        target = reveal_target(first, second)
+        button = QPushButton("Afficher")
+        button.setObjectName("Link")
+        button.setIcon(line_icon("folder", "#3B4CCA", 14))
+        if target is None:
+            button.setEnabled(False)
+            button.setToolTip("Le fichier n'est plus à cet emplacement.")
+        else:
+            button.setToolTip(f"Afficher dans {FILE_MANAGER} : {target}")
+            button.clicked.connect(lambda _=False, t=target: reveal(t))
+        return button
 
     # --- annulation ---------------------------------------------------------------------------
 

@@ -36,6 +36,7 @@ from tribin.ui.components import (
     thumbnail,
 )
 from tribin.ui.icons import line_icon
+from tribin.ui.system_integration import FILE_MANAGER, reveal, reveal_target
 from tribin.ui.theme import mono_font
 
 HESITATION = "L'IA hésite avec"
@@ -112,7 +113,7 @@ class DetailPanel(QFrame):
         self.reanalyze_button.clicked.connect(self.reanalyze_clicked)
         self.open_button = QPushButton("Ouvrir")
         self.open_button.clicked.connect(self._open_file)
-        self.reveal_button = QPushButton("Afficher dans le dossier")
+        self.reveal_button = QPushButton(f"Afficher dans {FILE_MANAGER}")
         self.reveal_button.clicked.connect(self._reveal_file)
         for button, icon in ((self.reanalyze_button, "sparkle"), (self.open_button, "open"),
                              (self.reveal_button, "folder")):
@@ -299,7 +300,9 @@ class DetailPanel(QFrame):
 
     def _reveal_file(self) -> None:
         if self.item:
-            QDesktopServices.openUrl(QUrl.fromLocalFile(str(Path(self.item.staged_path).parent)))
+            target = reveal_target(self.item.staged_path)
+            if target:
+                reveal(target)
 
     # --- affichage ----------------------------------------------------------------------------
 
