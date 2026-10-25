@@ -81,6 +81,7 @@ LINE_ICONS = {
     "chevron-right": '<path d="m9 6 6 6-6 6"/>',
     "chevron-down": '<path d="m6 9 6 6 6-6"/>',
     "chevron-left": '<path d="m15 6-6 6 6 6"/>',
+    "shield": '<path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6z"/><path d="m9 12 2 2 4-4"/>',
     "database": '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/>'
                 '<path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
     "arrow-right": '<path d="M5 12h14"/><path d="m13 6 6 6-6 6"/>',

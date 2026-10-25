@@ -19,10 +19,12 @@ class FakeLLM:
         self.answer = answer
         self.last_usage = Usage()
         self.prompts: list[str] = []
+        self.systems: list[str] = []
         self.images: list[list[bytes] | None] = []
 
     def complete_json(self, system, user, schema, images=None):
         self.prompts.append(user)
+        self.systems.append(system)
         self.images.append(images)
         self.last_usage = Usage(100, 50, 0.0001)
         result = self.answer(user)

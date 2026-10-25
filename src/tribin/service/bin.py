@@ -12,9 +12,9 @@ from tribin.config import STAGING_DIRNAME, Settings, is_within, read_api_key
 from tribin.convention.loader import Convention, ConventionError, load_convention
 from tribin.db import Database
 from tribin.convention.naming import fit_to_path
-from tribin.convention.structure import matches_template, personal_folder_ok
 from tribin.engine.context import folder_signature, make_context
 from tribin.engine.proposer import ProposeContext, has_placeholder, propose
+from tribin.engine.similar import MIN_WORD, distinctive_words
 from tribin.extract import extract
 from tribin.fs.filters import ExclusionMatcher, NotProcessable, check_processable
 from tribin.ids import new_id
@@ -59,8 +59,8 @@ class Prepared:
     batch: Batch
     report: SimulationReport
     validations: list[Validation]
-    # Mode personnel : dossiers conformes au gabarit (« Sante/2026 », nouvelle catégorie comprise), créés sans
-    # demander (choix de l'utilisateur) ; toujours journalisés et annulables.
+    # Dossiers que l'utilisateur autorise TriBin à créer sans demander (Réglages › Autorisations) ; toujours
+    # journalisés et annulables.
     new_category_folders: frozenset[Path] = frozenset()
 
     @property
@@ -109,12 +109,23 @@ class BinService:
         self._contexts: dict[str, tuple[tuple, ProposeContext]] = {}  # racine -> (signature des dossiers, contexte)
         self._convention: tuple[str, float, Convention] | None = None
         self._lock = threading.RLock()
+        # Fichiers qui se ressemblent (un mot distinctif commun) : analysés l'un après l'autre, pour que chacun voie
+        # où l'IA a proposé de ranger les précédents et que la série aille au même endroit.
+        self._word_locks: dict[str, threading.Lock] = {}
 
     # --- réglages -----------------------------------------------------------------------------
 
     @property
     def config(self) -> AppConfig:
         return load_config(self.db)
+
+    def creates_folders(self) -> bool:
+        """Autorisation « Créer des dossiers » : choix de l'utilisateur, sinon oui en Particulier, non en Professionnel."""
+        try:
+            personal = self.convention().personal
+        except BinError:
+            personal = False
+        return self.config.creates_folders("personal" if personal else "work")
 
     def update_config(self, config: AppConfig) -> None:
         save_config(self.db, config)
@@ -184,7 +195,9 @@ class BinService:
                     llm = self._provider_factory(settings, self.config.model or None)
                 except LLMError as exc:
                     llm = _NoLLM(str(exc), settings.model)
-                cached = (signature, make_context(Path(root), self.convention(), llm, self.settings, self.db))
+                ctx = make_context(Path(root), self.convention(), llm, self.settings, self.db)
+                ctx.create_folders = self.creates_folders()
+                cached = (signature, ctx)
                 self._contexts[key] = cached
             return cached[1]
 
@@ -228,14 +241,34 @@ class BinService:
             self.queue.upsert(item)
             log.info("staged file missing, removed from queue: %s", staged)
             return item
+        words = sorted(w for w in distinctive_words(Path(item.original_path).name) if len(w) >= MIN_WORD)
+        with self._lock:
+            locks = [self._word_locks.setdefault(w, threading.Lock()) for w in words]
+        for lock in locks:  # toujours dans le même ordre (alphabétique) : pas d'interblocage
+            lock.acquire()
         try:
-            proposal = propose(extract(staged), self.context(Path(item.root)))
+            proposal = propose(extract(staged), self.context(Path(item.root)), self._dropped_together(item, set(words)))
             proposal.file_id = item.file_id
             item.proposal, item.status, item.error = proposal, "ready", None
         except BinError as exc:
             item.status, item.error = "error", str(exc)
+        finally:
+            for lock in reversed(locks):
+                lock.release()
         self.queue.upsert(item)
         return item
+
+    def _dropped_together(self, item: QueueItem, words: set[str]) -> list[str]:
+        """Fichiers en attente, déjà analysés, qui partagent un mot distinctif avec celui-ci, et leur dossier proposé."""
+        lines = []
+        for other in self.queue.active():
+            p = other.proposal
+            if other.file_id == item.file_id or other.status != "ready" or not p or p.manual or not p.target_folder:
+                continue
+            name = Path(other.original_path).name
+            if words & distinctive_words(name):
+                lines.append(f"« {name} » → {p.target_folder}")
+        return lines[:8]
 
     def pending(self) -> list[QueueItem]:
         return self.queue.active()
@@ -351,6 +384,8 @@ class BinService:
             item = self.queue.get(v.file_id)
             if item is None or not item.proposal:
                 raise BinError("Proposition introuvable pour ce fichier.")
+            if item.status == "done":
+                raise BinError(f"« {Path(item.original_path).name} » vient déjà d'être rangé : voyez l'Historique.")
             p = item.proposal
             meta = {
                 "file_id": v.file_id, "decision": v.decision, "prompt_version": p.prompt_version, "model": p.model,
@@ -359,10 +394,7 @@ class BinService:
             }
             archive_older_versions(batch, p, Path(item.root), v.target_folder, self.convention(), v.file_id)
             batch.move(Choice(Path(item.staged_path), Path(item.root), v.target_folder, v.new_name, meta))
-            convention = self.convention()
-            if convention.personal and ((p.new_category and v.target_folder.split("/")[0] == p.new_category)
-                                        or matches_template(v.target_folder, convention)
-                                        or personal_folder_ok(v.target_folder, convention, Path(item.root))):
+            if self.creates_folders():  # autorisation : dossiers et sous-dossiers créés sans demander (annulables)
                 parts = v.target_folder.split("/")
                 trusted |= {Path(item.root).joinpath(*parts[:i]) for i in range(1, len(parts) + 1)}
         return Prepared(batch, executor.simulate(batch.ops), validations, frozenset(trusted))

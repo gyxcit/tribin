@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-PROMPT_VERSION = "p6"
-PERSONAL_PROMPT_VERSION = "p7-perso"
+PROMPT_VERSION = "p7"
+PERSONAL_PROMPT_VERSION = "p8-perso"
 
 SYSTEM_PROMPT = """Tu es l'assistant de rangement de fichiers d'une équipe. Ta mission : proposer
 le dossier où ranger un fichier et les éléments de son nouveau nom, en respectant
@@ -15,13 +15,16 @@ Règles :
 - Choisis de préférence un dossier existant parmi les candidats fournis.
 - Si aucun candidat ne convient, construis le chemin avec un projet de la liste
   « Projets existants » et une catégorie de la convention.
-- Ne propose un nouveau dossier que s'il suit le gabarit de structure de la
-  convention ; indique alors folder_is_new = true.
-- Si la section « Fichiers du même modèle de nom déjà rangés » est présente,
-  l'utilisateur range déjà ce type de fichier dans ce dossier : c'est la
-  destination la plus probable, MÊME s'il ne suit pas le gabarit (dossier
-  personnel, RH, banque…). Choisis-le avec confidence 0.85 à 0.95, sauf si le
-  contenu du fichier le contredit ; client et projet peuvent alors rester null.
+{work_creation}
+- Si la section « Fichiers déjà rangés qui ressemblent à celui-ci » montre des
+  fichiers « au nom du même modèle », l'utilisateur range déjà ce type de fichier
+  dans ce dossier : c'est la destination la plus probable, MÊME s'il ne suit pas
+  le gabarit (dossier personnel, RH, banque…). Choisis-le avec confidence 0.85 à
+  0.95, sauf si le contenu du fichier le contredit ; client et projet peuvent alors
+  rester null. Des fichiers qui partagent seulement un mot du nom sont un indice,
+  à confirmer par le contenu.
+- Si la section « Déposés en même temps » montre des fichiers du même projet, de
+  la même personne ou de la même série, range celui-ci au MÊME endroit qu'eux.
 - Le client doit être un code de la liste des clients. S'il est inconnu, mets
   client = null et explique-le dans reasoning.
 - target_folder ne contient JAMAIS « null », « None », « inconnu » ni un champ du
@@ -43,40 +46,58 @@ Règles :
   0.4 à 0.55 : deux catégories ou deux projets sont plausibles, ou le fichier n'a
             pas de texte et tu te fondes sur le nom, la date ou l'image ;
   moins de 0.4 : tu devines.
-  Si une autre destination est plausible, indique-la dans alternatives : un humain
-  tranchera. Donne quand même ta vraie confiance pour la proposition principale.
+  alternatives : seulement si tu hésites vraiment entre deux destinations (un
+  humain tranchera) ; une piste nettement moins adaptée n'en est pas une : laisse
+  alors la liste vide. Donne ta vraie confiance pour la proposition principale.
 - Réponds UNIQUEMENT avec un objet JSON valide, sans aucun texte autour."""
 
 PERSONAL_RULES = """
 
 Mode personnel (papiers et fichiers d'une personne, pas d'une agence) :
 - Il n'y a ni client ni projet : client, project_code et project_name = null.
-- Les dossiers existants comptent autant que les catégories, même s'ils ne sont pas
-  dans la liste (« startup », « Voyage-Japon » : créés par l'utilisateur). Si un dossier
-  contient déjà des fichiers du même sujet, du même projet ou portant le même mot
-  distinctif (voir « Fichiers déjà rangés qui ressemblent à celui-ci », le contenu du
-  fichier et les corrections passées), range le fichier dans ce dossier plutôt que
-  dans une catégorie générale : c'est là que l'utilisateur le cherchera.
-- Sinon, choisis la catégorie la plus adaptée dans la liste (le nom du dossier existant
-  compte : « salaire » pour un bulletin de paie s'il existe).
-- Si AUCUNE catégorie ne convient vraiment, crée-en une : category = nom court
-  en français, 1 ou 2 mots, sans accent (ex. « Animaux », « Voyages »). N'en
-  crée pas si une catégorie existante convient, même approximativement.
-- target_folder : la catégorie, puis AU PLUS {subs} niveau(x) de sous-dossiers ({depth} niveaux au total).
-  Réutilise d'abord les sous-dossiers existants (liste des candidats). Crée un sous-
-  dossier quand il regroupe un type de document qui reviendra, du plus général au
-  plus précis (ex. « Etudes/Certifications/Universite », « Etudes/Attestations/
-  Benevolat ») ; sinon range directement dans la catégorie (« Etudes »). Pas de
-  dossier par année, sauf s'il existe déjà pour ce type de document.
-- confidence : 0.85 à 0.95 si la nature du document correspond clairement à une
-  catégorie (existante ou créée) ; 0.6 à 0.8 si deux catégories sont plausibles ;
+- Un dossier existant n'est le bon que s'il parle VRAIMENT du même sujet : même
+  projet, même personne, même organisme ou même type de document, ce que montrent
+  le contenu du fichier, un mot distinctif commun (« Stagio ») ou une correction
+  passée. Un thème vague (« projet », « personnel », « création ») ne suffit pas.
+  Alors, un dossier créé par l'utilisateur hors de la liste (« startup ») compte
+  autant qu'une catégorie : range-y le fichier.
+- La catégorie doit correspondre à la NATURE du document : des logos, maquettes ou
+  visuels créés ne sont pas des « Photos » (photos et vidéos personnelles) ; un
+  travail réalisé pour quelqu'un n'est pas des « Etudes ».
+{personal_creation}
+- target_folder : la catégorie (ou le dossier existant choisi), puis AU PLUS {subs}
+  niveau(x) de sous-dossiers ({depth} niveaux au total). Réutilise d'abord les
+  sous-dossiers existants (liste des candidats). Pas de dossier par année, sauf
+  s'il existe déjà pour ce type de document.
+- description : 2 à 5 mots qui gardent le nom propre utile (personne, projet,
+  organisme : « Logos Sarah Mbossa », « Facture Stagio »), sans la date.
+- confidence : 0.85 à 0.95 si la nature du document correspond clairement à un
+  dossier (existant ou créé) ; 0.6 à 0.8 si deux dossiers sont plausibles ;
   moins de 0.6 si tu ne comprends pas le document."""
 
+# Autorisation « Créer des dossiers » (Réglages › Autorisations)
+WORK_CREATE = """- Ne propose un nouveau dossier que s'il suit le gabarit de structure de la
+  convention ; indique alors folder_is_new = true."""
+WORK_NO_CREATE = """- Ne propose AUCUN nouveau dossier (l'utilisateur ne l'autorise pas) : choisis
+  parmi les candidats et les projets existants."""
+PERSONAL_CREATE = """- Si aucun dossier existant ne correspond vraiment, CRÉE un dossier dédié plutôt
+  que de forcer un dossier approximatif : une catégorie quand la nature du document
+  n'en a pas (category = nom court en français, 1 ou 2 mots, sans accent :
+  « Design », « Voyages », « Animaux »), puis un sous-dossier au nom du projet ou de
+  la personne quand plusieurs fichiers le concernent (« Design/Sarah-Mbossa »).
+  Indique alors folder_is_new = true. Crée aussi un sous-dossier quand il regroupe
+  un type de document qui reviendra (« Etudes/Certifications/Universite »)."""
+PERSONAL_NO_CREATE = """- Ne crée AUCUN dossier (l'utilisateur ne l'autorise pas) : ni catégorie ni sous-
+  dossier. Choisis le dossier existant le plus adapté (candidats). Si aucun ne
+  convient, target_folder = "" et confidence < 0.3 : l'utilisateur choisira."""
 
-def system_prompt(personal: bool, depth: int = 3) -> str:
+
+def system_prompt(personal: bool, depth: int = 3, create_folders: bool = True) -> str:
+    base = SYSTEM_PROMPT.replace("{work_creation}", WORK_CREATE if create_folders else WORK_NO_CREATE)
     if not personal:
-        return SYSTEM_PROMPT
-    return SYSTEM_PROMPT + PERSONAL_RULES.replace("{subs}", str(max(0, depth - 1))).replace("{depth}", str(depth))
+        return base
+    rules = PERSONAL_RULES.replace("{personal_creation}", PERSONAL_CREATE if create_folders else PERSONAL_NO_CREATE)
+    return base + rules.replace("{subs}", str(max(0, depth - 1))).replace("{depth}", str(depth))
 
 
 def prompt_version(personal: bool) -> str:
@@ -124,6 +145,7 @@ class PromptData:
     project_folders: list[str] = field(default_factory=list)
     correction_examples: list[str] = field(default_factory=list)
     similar_files: list[str] = field(default_factory=list)
+    dropped_together: list[str] = field(default_factory=list)
     client_hint: str = ""
     has_image: bool = False
     extra_notes: list[str] = field(default_factory=list)
@@ -164,6 +186,7 @@ def build_user_prompt(d: PromptData) -> str:
         _section("Projets existants", ", ".join(d.project_folders)),
         _section("Fichiers déjà rangés qui ressemblent à celui-ci (même modèle de nom ou même mot distinctif)",
                  _bullets(d.similar_files)),
+        _section("Déposés en même temps, déjà analysés (fichier → dossier proposé)", _bullets(d.dropped_together)),
         _section("Exemples de corrections passées (fichier d'origine → choix final)", _bullets(d.correction_examples)),
         _section("Indice", f"Client détecté automatiquement (peut être faux) : {d.client_hint}" if d.client_hint else ""),
         _section("Fichier à ranger", file_block),

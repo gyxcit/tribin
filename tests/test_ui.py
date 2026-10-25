@@ -810,3 +810,29 @@ def test_sidebar_collapses_from_logo_and_remembers(qapp, controller):
     assert controller.service.config.sidebar_collapsed  # gardé pour la prochaine ouverture
     window.brand.clicked.emit()
     assert window.nav_buttons["home"].text() == "Accueil" and not controller.service.config.sidebar_collapsed
+
+
+def test_permissions_page_and_no_double_filing(qapp, controller):
+    from tribin.ui.settings import PAGES, SettingsDialog
+
+    assert [key for key, *_ in PAGES][2] == "permissions"
+    dialog = SettingsDialog(controller)
+    controller.extra.append(dialog)
+    assert not dialog.create_folders.isChecked()  # mode Professionnel : avec votre accord, par défaut
+    assert controller.service.config.auto_create_folders is None
+    dialog.create_folders.click()
+    assert dialog.create_folders_state.text() == "Autorisé"
+    dialog._save()
+    assert controller.service.config.auto_create_folders is True and controller.service.creates_folders()
+
+    controller.drop_paths([controller.sb / "inbox" / "scan0042.pdf"])
+    assert wait(qapp, lambda: ready_items(controller, 1))
+    controller.refresh_queue()
+    win = controller.bin_window
+    win.validate_selected()
+    win.validate_selected()  # Entrée appuyée deux fois pendant le rangement
+    assert wait(qapp, lambda: not controller.service.pending())
+    assert wait(qapp, lambda: not controller._filing)
+    moves = [o for o in controller.service.executor().journal.states().values()
+             if o.get("action") == "move" and o.get("status") == "done"]
+    assert len(moves) == 1

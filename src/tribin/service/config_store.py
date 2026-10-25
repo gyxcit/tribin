@@ -22,9 +22,18 @@ class AppConfig(BaseModel):
     auto_file: bool = False  # ranger tout seul les propositions sûres ; les autres attendent un avis
     auto_min_confidence: float = 0.8  # seuil du rangement automatique (réglable de 60 à 95 %)
     hotkey: bool = True  # Ctrl + Alt + T : envoie la sélection de l'Explorateur à TriBin (Windows)
+    # Autorisation : créer sans demander les dossiers et sous-dossiers proposés (journalisé, annulable).
+    # None : réglage par défaut du mode (oui en Particulier, non en Professionnel : la structure d'équipe est partagée).
+    auto_create_folders: bool | None = None
     sidebar_collapsed: bool = False  # menu de la fenêtre replié (icônes seules) ; clic sur le logo pour basculer
     onboarding_done: bool = False
     privacy_accepted: bool = False
+
+    def creates_folders(self, mode: str | None = None) -> bool:
+        """TriBin peut-il créer seul les dossiers proposés ? (choix de l'utilisateur, sinon le défaut du mode)"""
+        if self.auto_create_folders is not None:
+            return self.auto_create_folders
+        return (mode or self.mode) == "personal"
 
     def root_paths(self) -> list[Path]:
         return [Path(r) for r in self.roots]

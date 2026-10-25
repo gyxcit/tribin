@@ -42,6 +42,7 @@ class ProposeContext:
     rules_provider: Callable[[], list[str]] | None = None
     similar_provider: Callable[[FileInfo], list[SimilarFolder]] | None = None
     project_folders: list[str] = field(default_factory=list)
+    create_folders: bool = True  # autorisation (Réglages › Autorisations) : l'IA peut proposer de nouveaux dossiers
     _phase1_cache: list[Candidate] | None = None
 
     def candidates(self, info: FileInfo, client_hint: str | None) -> list[Candidate]:
@@ -103,7 +104,8 @@ def _clients_text(convention: Convention, hint: str | None) -> str:
 
 
 def build_prompt_data(info: FileInfo, ctx: ProposeContext, hint: str | None, candidates: list[Candidate],
-                      examples: list[str], similar: list[SimilarFolder] | None = None) -> PromptData:
+                      examples: list[str], similar: list[SimilarFolder] | None = None,
+                      together: list[str] | None = None) -> PromptData:
     conv = ctx.convention
     return PromptData(
         structure_template=conv.structure.template,
@@ -124,6 +126,7 @@ def build_prompt_data(info: FileInfo, ctx: ProposeContext, hint: str | None, can
         project_folders=ctx.project_folders,
         correction_examples=examples,
         similar_files=[s.render() for s in similar or []],
+        dropped_together=together or [],
         client_hint=hint or "",
         has_image=bool(info.images),
         extra_notes=[f"Métadonnées : {', '.join(f'{k}={v}' for k, v in info.metadata.items())}"] if info.metadata else [],
@@ -275,10 +278,11 @@ def finalize(info: FileInfo, resp: LLMProposal, ctx: ProposeContext) -> Proposal
         return manual_proposal(info, ctx, "le dossier proposé est dans une zone exclue.")
     confidence = max(0.0, min(1.0, float(resp.confidence)))
     folder_is_new = not abs_folder.is_dir()
+    ask = "" if ctx.create_folders else " (avec votre accord)"  # Réglages › Autorisations
     if folder_is_new and new_category:
-        warnings.append(f"Nouvelle catégorie « {new_category} » : le dossier {folder} sera créé.")
+        warnings.append(f"Nouvelle catégorie « {new_category} » : le dossier {folder} sera créé{ask}.")
     elif folder_is_new:
-        warnings.append(f"Création de dossier : {folder}")
+        warnings.append(f"Création de dossier : {folder}{ask}")
         if not matches_template(folder, conv) and not personal_folder_ok(folder, conv, root):
             warnings.append("Le dossier proposé ne suit pas le gabarit de la convention.")
             confidence = min(confidence, 0.5)
@@ -318,8 +322,11 @@ def finalize(info: FileInfo, resp: LLMProposal, ctx: ProposeContext) -> Proposal
     )
 
 
-def propose(info: FileInfo, ctx: ProposeContext) -> Proposal:
-    """Produit une proposition pour un fichier ; ne lève pas d'exception (échec -> « à traiter manuellement »)."""
+def propose(info: FileInfo, ctx: ProposeContext, together: list[str] | None = None) -> Proposal:
+    """Produit une proposition pour un fichier ; ne lève pas d'exception (échec -> « à traiter manuellement »).
+
+    `together` : fichiers du même lot déjà analysés et qui lui ressemblent (« « Logos-1.png » → Design/Sarah ») :
+    l'IA range ensemble ce qui va ensemble."""
     started = time.monotonic()
     hint = ctx.client_detector(info) if ctx.client_detector else None
     candidates = ctx.candidates(info, hint)
@@ -331,9 +338,10 @@ def propose(info: FileInfo, ctx: ProposeContext) -> Proposal:
         similar = []
     known = {c.rel.casefold() for c in candidates}
     candidates = [*candidates, *(Candidate(s.folder, s.reason) for s in similar if s.folder.casefold() not in known)]
-    data = build_prompt_data(info, ctx, hint, candidates, examples, similar)
+    data = build_prompt_data(info, ctx, hint, candidates, examples, similar, together)
     try:
-        resp = ctx.llm.complete_json(system_prompt(ctx.convention.personal, ctx.convention.structure.max_depth or 1),
+        resp = ctx.llm.complete_json(system_prompt(ctx.convention.personal, ctx.convention.structure.max_depth or 1,
+                                                   ctx.create_folders),
                                      build_user_prompt(data), LLMProposal,
                                      images=info.images[:1] or None)
         proposal = finalize(info, resp, ctx)

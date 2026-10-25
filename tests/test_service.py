@@ -352,3 +352,51 @@ def test_local_account(settings):
     saved = save_account(db, "Regis Likassi", "regis@exemple.fr")
     assert saved.initials == "RL" and get_account(db).email == "regis@exemple.fr"
     assert default_name("DOMAINE" + chr(92) + "jean.dupont") == "Jean Dupont"
+
+
+def test_folder_creation_permission(settings, sb):
+    """Réglages › Autorisations : par défaut oui en Particulier, non en Professionnel ; réglable."""
+    llm = fixed(category="Design", target_folder="Design/Sarah-Mbossa", description="Logos Sarah Mbossa",
+                confidence=0.9)
+    svc, _ = personal_service(settings, sb, llm)
+    assert svc.creates_folders() and AppConfig().creates_folders("work") is False
+    item = svc.analyze(svc.drop(sb / "inbox" / "scan0042.pdf").file_id)
+    assert "CRÉE un dossier dédié" in llm.systems[-1]
+    prepared = svc.prepare([Validation(item.file_id, item.proposal.target_folder, item.proposal.new_name, "accepted")])
+    assert not prepared.needs_confirmation  # autorisé : créés sans demander (annulables)
+
+    cfg = svc.config
+    cfg.auto_create_folders = False
+    svc.update_config(cfg)
+    assert not svc.creates_folders()
+    other = svc.analyze(svc.drop(sb / "inbox" / "BC_4512.pdf").file_id)
+    assert "Ne crée AUCUN dossier" in llm.systems[-1]
+    assert any("avec votre accord" in w for w in other.proposal.warnings)
+    prepared = svc.prepare([Validation(other.file_id, other.proposal.target_folder, other.proposal.new_name,
+                                       "accepted")])
+    assert prepared.needs_confirmation  # sans autorisation : la simulation est montrée avant de créer
+    assert other.file_id not in [i.file_id for i in svc.auto_file().done]
+
+
+def test_files_dropped_together_see_each_other(settings, sb):
+    """Une série (« … Sarah Mbossa-1 », « … Sarah Mbossa-2 ») : le second voit où l'IA a mis le premier."""
+    for n in (1, 2):
+        shutil.copy(sb / "inbox" / "scan0042.pdf", sb / "inbox" / f"Planche logos Sarah Mbossa-{n}.pdf")
+    llm = fixed(category="Design", target_folder="Design/Sarah-Mbossa", description="Logos Sarah Mbossa",
+                confidence=0.9)
+    svc, _ = personal_service(settings, sb, llm)
+    first = svc.drop(sb / "inbox" / "Planche logos Sarah Mbossa-1.pdf")
+    second = svc.drop(sb / "inbox" / "Planche logos Sarah Mbossa-2.pdf")
+    svc.analyze(first.file_id)
+    svc.analyze(second.file_id)
+    together = llm.prompts[-1].split("## Déposés en même temps")[1].split("##")[0]
+    assert "« Planche logos Sarah Mbossa-1.pdf » → Design/Sarah-Mbossa" in together
+
+
+def test_a_file_already_filed_is_not_filed_twice(settings, sb):
+    svc = service(settings, sb)
+    item = svc.analyze(svc.drop(sb / "inbox" / "scan0042.pdf").file_id)
+    v = Validation(item.file_id, item.proposal.target_folder, item.proposal.new_name, "accepted")
+    svc.commit(svc.prepare([v]))
+    with pytest.raises(BinError, match="vient déjà d'être rangé"):
+        svc.prepare([v])  # second appui sur Entrée pendant / après le rangement

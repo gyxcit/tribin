@@ -25,6 +25,7 @@ from tribin.safety.operations import FILE_ACTIONS, Batch, Choice, Operation
 log = logging.getLogger(__name__)
 
 LOCKED_MESSAGE = "Fichier ouvert dans une autre application : ferme-le puis réessaie."
+NOT_OVERWRITTEN = "rien n'est écrasé"  # fin de la remarque « nom déjà pris » (retirée puis recalculée à chaque simulation)
 
 
 @dataclass
@@ -153,7 +154,8 @@ class Executor:
         if src.is_symlink():
             return [f"« {src.name} » est un lien symbolique : refusé."]
         if not (v.file_exists(src) and (src.is_file() or v.key(src) in v.files)):
-            return [f"Fichier source introuvable : {src}"]
+            return [f"« {src.name} » n'est plus dans « {src.parent.name} » : il a sans doute déjà été rangé, "
+                    "déplacé ou supprimé. Rien ne sera fait."]
         if is_ignored_name(src.name):
             problems.append(f"« {src.name} » est un fichier système ou temporaire : refusé.")
         src_root = self._root_of(src)  # la source peut venir d'ailleurs (bureau…) ; seule la destination est bornée
@@ -165,8 +167,8 @@ class Executor:
             existing = {op.destination.name}
             if op.destination.parent.is_dir():
                 existing |= {e.name for e in os.scandir(op.destination.parent)}
-            op.notes.append(f"« {op.destination.name} » existe déjà : un suffixe sera ajouté "
-                            f"({unique_name(op.destination.name, existing)}).")
+            op.notes.append(f"Un fichier « {op.destination.name} » est déjà dans ce dossier : celui-ci s'appellera "
+                            f"« {unique_name(op.destination.name, existing)} » ({NOT_OVERWRITTEN}).")
         if op.destination.parent.is_dir() and not os.access(op.destination.parent, os.W_OK):
             problems.append(f"Pas le droit d'écrire dans {op.destination.parent}")
         if src.exists() and not os.access(src.parent, os.W_OK):
@@ -185,7 +187,7 @@ class Executor:
         virtual = _Virtual()
         failed: set[str] = set()
         for op in ops:
-            op.notes = [n for n in op.notes if "suffixe sera ajouté" not in n]
+            op.notes = [n for n in op.notes if NOT_OVERWRITTEN not in n]
             problems = self.check(op, virtual)
             if any(d in failed for d in op.depends_on):
                 problems.append("Dépend d'une opération en erreur.")

@@ -1,5 +1,5 @@
-"""Réglages, rangés par catégories dans une colonne à gauche : Dossiers, Rangement, Intelligence artificielle,
-Apprentissage, Système, Données. Chaque réglage : titre et aide à gauche, contrôle à droite."""
+"""Réglages, rangés par catégories dans une colonne à gauche : Dossiers, Rangement, Autorisations,
+Intelligence artificielle, Apprentissage, Système, Données. Chaque réglage : titre et aide à gauche, contrôle à droite."""
 
 from __future__ import annotations
 
@@ -76,7 +76,7 @@ MODELS = {"anthropic": ["claude-haiku-5-5", "claude-sonnet-5-5"],
           "gemini": ["gemini-flash-latest", "gemini-flash-lite-latest", "gemini-pro-latest"],
           "mistral": ["mistral-medium-latest", "mistral-small-latest", "mistral-large-latest"]}
 PAGES = (("folders", "Dossiers", "folder"), ("filing", "Rangement", "files"),
-         ("ai", "Intelligence artificielle", "sparkle"),
+         ("permissions", "Autorisations", "shield"), ("ai", "Intelligence artificielle", "sparkle"),
          ("learning", "Apprentissage", "brain"), ("system", "Système", "monitor"),
          ("data", "Données", "database"))
 
@@ -175,8 +175,8 @@ class SettingsDialog(QDialog):
         self.resize(960, 660)
 
         self.pages = QStackedWidget()
-        for build in (self._folders_page, self._filing_page, self._ai_page, self._learning_page, self._system_page,
-                      self._data_page, self._all_rules_page):  # la dernière : sous-page, hors de la navigation
+        for build in (self._folders_page, self._filing_page, self._permissions_page, self._ai_page, self._learning_page,
+                      self._system_page, self._data_page, self._all_rules_page):  # la dernière : sous-page, hors de la navigation
             page = build()
             page.finish()
             self.pages.addWidget(page)
@@ -410,6 +410,32 @@ class SettingsDialog(QDialog):
                                     if risky else "")
         self.threshold_hint.setVisible(risky)
 
+    def _permissions_page(self) -> SettingsPage:
+        """Ce que TriBin peut faire seul, sans demander : un interrupteur et une phrase par autorisation."""
+        page = SettingsPage("Autorisations")
+        self.initial_create_folders = self.c.service.creates_folders()
+        self.create_folders = ToggleSwitch(self.initial_create_folders)
+        self.create_folders.setAccessibleName("Créer des dossiers")
+        self.create_folders_state = QLabel()
+        self.create_folders_state.setStyleSheet("font-weight: 600;")
+        self.create_folders_hint = muted()
+        switch_row = QHBoxLayout()
+        switch_row.setSpacing(12)
+        switch_row.addWidget(self.create_folders)
+        switch_row.addWidget(self.create_folders_state, 1)
+        page.add_row("Créer des dossiers", "", column(switch_row, self.create_folders_hint))
+        self.create_folders.toggled.connect(lambda _: self._permissions_changed())
+        self._permissions_changed()
+        return page
+
+    def _permissions_changed(self) -> None:
+        on = self.create_folders.isChecked()
+        self.create_folders_state.setText("Autorisé" if on else "Avec votre accord")
+        self.create_folders_hint.setText(
+            "TriBin crée seul les dossiers et sous-dossiers qu'il propose (« Design/Sarah-Mbossa »). "
+            "Tout reste annulable depuis l'Historique." if on else
+            "TriBin range dans les dossiers existants ; s'il en faut un nouveau, il vous le montre avant de le créer.")
+
     def _ai_page(self) -> SettingsPage:
         svc = self.c.service
         ai_settings = svc.ai_settings()
@@ -624,6 +650,8 @@ class SettingsDialog(QDialog):
         self.naming_changed = self.date_position() != self.initial_date_position and bool(cfg.convention_path)
         if self.naming_changed:
             set_date_position(Path(cfg.convention_path), self.date_position())
+        if self.create_folders.isChecked() != self.initial_create_folders:  # sinon : le réglage par défaut du mode
+            cfg.auto_create_folders = self.create_folders.isChecked()
         cfg.auto_file = self.auto_file.isChecked()
         cfg.auto_min_confidence = self.threshold.value() / 100
         cfg.hotkey = self.hotkey.isChecked()
