@@ -37,7 +37,13 @@ from tribin.learning.corrections import team_rule_alerts
 from tribin.learning.rules_store import delete_rule, list_rules, update_rule
 from tribin.service.bin import AUTO_MIN_CONFIDENCE
 from tribin.convention.loader import PERSONAL_DEPTH
-from tribin.service.conventions import create_convention, current_mode, set_personal_depth
+from tribin.service.conventions import (
+    create_convention,
+    current_mode,
+    has_date_prefix,
+    set_date_prefix,
+    set_personal_depth,
+)
 from tribin.service.profile import PRIVACY_NOTICE, save_profile
 from tribin.ui import system_integration
 from tribin.ui.components import (
@@ -225,6 +231,8 @@ class SettingsDialog(QDialog):
         page.add_row("Convention de rangement", "Vos catégories et la façon de nommer les fichiers."
                      if self.initial_mode == "personal" else "Fichier partagé par l'équipe, sur cet ordinateur ou le NAS.",
                      column(conv_row, remap))
+        page.add_row("Nom des fichiers", "TriBin renomme chaque fichier rangé selon la convention.",
+                     self._naming_box())
         self.depth_buttons = QButtonGroup(self)
         self.initial_depth = self._current_depth()
         if self.initial_mode == "personal":
@@ -234,6 +242,36 @@ class SettingsDialog(QDialog):
         page.add_row("Rangement automatique", "TriBin range tout seul les fichiers dont l'IA est assez sûre. "
                      "Les autres attendent votre avis : TriBin vous prévient.", self._auto_box(cfg))
         return page
+
+    def _naming_box(self) -> QWidget:
+        """Interrupteur « commencer par la date » et exemple de nom mis à jour en direct."""
+        try:
+            self.initial_date_prefix = has_date_prefix(self.c.service.convention())
+        except Exception:
+            self.initial_date_prefix = True
+        box = QWidget()
+        layout = QVBoxLayout(box)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+        row = QHBoxLayout()
+        row.setSpacing(12)
+        self.date_prefix = ToggleSwitch(self.initial_date_prefix)
+        self.date_prefix.setAccessibleName("Commencer le nom par la date")
+        row.addWidget(self.date_prefix)
+        row.addWidget(QLabel("Commencer le nom par la date du document"), 1)
+        layout.addLayout(row)
+        self.name_example = QLabel()
+        self.name_example.setFont(mono_font())
+        layout.addWidget(self.name_example)
+        if self.initial_mode == "work":
+            layout.addWidget(muted("Modifie la convention de l'équipe : à décider ensemble."))
+        self.date_prefix.toggled.connect(lambda _: self._naming_changed())
+        self._naming_changed()
+        return box
+
+    def _naming_changed(self) -> None:
+        self.name_example.setText("Exemple : " + ("2026-10-19_CV-ingenieur-IA.pdf" if self.date_prefix.isChecked()
+                                                  else "CV-ingenieur-IA.pdf"))
 
     def _current_depth(self) -> int:
         try:
@@ -502,6 +540,9 @@ class SettingsDialog(QDialog):
             QMessageBox.information(self, "TriBin", note)
         if self.initial_mode == "personal" and mode == "personal" and self.depth() != self.initial_depth:
             set_personal_depth(Path(cfg.convention_path), self.depth())
+        self.naming_changed = self.date_prefix.isChecked() != self.initial_date_prefix and bool(cfg.convention_path)
+        if self.naming_changed:
+            set_date_prefix(Path(cfg.convention_path), self.date_prefix.isChecked())
         cfg.auto_file = self.auto_file.isChecked()
         cfg.auto_min_confidence = self.threshold.value() / 100
         cfg.hotkey = self.hotkey.isChecked()

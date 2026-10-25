@@ -94,6 +94,26 @@ def set_personal_depth(path: Path, depth: int) -> None:
     save_convention(convention, path)
 
 
+def date_prefix_template(template: str, separator: str, enabled: bool) -> str:
+    """Gabarit de nommage avec ou sans la date en tête (« {date}_{description} » <-> « {description} »)."""
+    if enabled:
+        return template if "{date}" in template else "{date}" + separator + template
+    for token in ("{date}" + separator, separator + "{date}", "{date}"):
+        template = template.replace(token, "")
+    return template
+
+
+def has_date_prefix(convention: Convention) -> bool:
+    return "{date}" in convention.naming.template
+
+
+def set_date_prefix(path: Path, enabled: bool) -> None:
+    """Réglages › Rangement : noms de fichiers avec ou sans la date au début."""
+    convention = load_convention(path)
+    convention.naming.template = date_prefix_template(convention.naming.template, convention.naming.separator, enabled)
+    save_convention(convention, path)
+
+
 def add_category(path: Path, code: str, description: str = "Créée automatiquement par TriBin") -> bool:
     """Ajoute une catégorie à la convention (mode personnel) ; faux si elle existait déjà."""
     convention = load_convention(path)

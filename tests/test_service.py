@@ -301,3 +301,13 @@ def test_old_personal_conventions_switch_to_depth():
     assert old.structure.max_depth == 3 and old.structure.template == "{category}"
     work = Convention.model_validate({"structure": {"template": "{client}/{year}/{project}/{category}"}})
     assert work.structure.max_depth == 0  # mode travail : inchangé
+
+
+def test_date_prefix_template_on_and_off():
+    from tribin.service.conventions import date_prefix_template
+
+    assert date_prefix_template("{date}_{description}", "_", False) == "{description}"
+    assert date_prefix_template("{description}", "_", True) == "{date}_{description}"
+    work = "{date}_{client}_{project_code}_{description}_v{version}"
+    assert date_prefix_template(work, "_", False) == "{client}_{project_code}_{description}_v{version}"
+    assert date_prefix_template(work, "_", True) == work

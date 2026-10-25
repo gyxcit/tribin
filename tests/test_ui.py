@@ -647,3 +647,15 @@ def test_settings_filing_page_depth(qapp, controller):
     assert dialog.depth_example.text().endswith("Certifications")
     dialog._save()
     assert svc.convention().structure.max_depth == 2
+
+
+def test_date_prefix_switch_renames_pending_files(qapp, controller, monkeypatch):
+    from tribin.ui.settings import SettingsDialog
+
+    controller.drop_paths([controller.sb / "inbox" / "scan0042.pdf"])
+    assert wait(qapp, lambda: ready_items(controller, 1))
+    assert controller.service.pending()[0].proposal.new_name == "2026-10-12_ACME_2026-042_Devis-impression.pdf"
+    monkeypatch.setattr(SettingsDialog, "exec", lambda self: (self.date_prefix.click(), self._save(), True)[-1])
+    controller.show_settings()  # interrupteur « Commencer le nom par la date » coupé, puis Enregistrer
+    assert "{date}" not in controller.service.convention().naming.template
+    assert controller.service.pending()[0].proposal.new_name == "ACME_2026-042_Devis-impression.pdf"

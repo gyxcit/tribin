@@ -10,6 +10,7 @@ from pathlib import Path
 from tribin.config import STAGING_DIRNAME, Settings, is_within, read_api_key
 from tribin.convention.loader import Convention, ConventionError, load_convention
 from tribin.db import Database
+from tribin.convention.naming import fit_to_path
 from tribin.convention.structure import matches_template, personal_folder_ok
 from tribin.engine.context import folder_signature, make_context
 from tribin.engine.proposer import ProposeContext, has_placeholder, propose
@@ -282,6 +283,23 @@ class BinService:
 
     def set_aside_items(self) -> list[QueueItem]:
         return self.queue.skipped()
+
+    def rebuild_pending_names(self) -> int:
+        """Nommage modifié dans les réglages : les noms proposés des fichiers en attente sont recalculés
+        (sans nouvel appel à l'IA). Renvoie le nombre de noms changés."""
+        convention = self.convention()
+        changed = 0
+        for item in self.pending():
+            p = item.proposal
+            if item.status != "ready" or not p or p.manual:
+                continue
+            staged = Path(item.staged_path)
+            name, _ = fit_to_path(p.fields, convention.naming, staged.suffix, Path(item.root) / p.target_folder)
+            if name != p.new_name:
+                p.new_name = name
+                self.queue.upsert(item)
+                changed += 1
+        return changed
 
     def reload(self) -> None:
         """« Actualiser » : relit la clé API (trousseau, .env), la convention et les réglages."""

@@ -248,7 +248,10 @@ class AppController:
     def show_settings(self) -> None:
         from tribin.ui.settings import SettingsDialog
 
-        if SettingsDialog(self).exec():
+        dialog = SettingsDialog(self)
+        if dialog.exec():
+            if getattr(dialog, "naming_changed", False):
+                self.service.rebuild_pending_names()  # noms proposés des fichiers en attente, selon le nouveau nommage
             self.apply_hotkey()
             self.retry_without_ai()
             self.refresh_queue()
