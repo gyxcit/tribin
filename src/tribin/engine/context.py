@@ -10,8 +10,10 @@ from tribin.convention.loader import Convention
 from tribin.db import Database
 from tribin.engine.candidates import project_folders, select_candidates
 from tribin.engine.clients import detect_client
+from tribin.engine.prompts import DEFAULT_PROMPT_STYLE
 from tribin.engine.proposer import ProposeContext
 from tribin.engine.similar import PlacedFiles
+from tribin.engine.tools import default_tools
 from tribin.learning.corrections import similar_examples
 from tribin.learning.rules_store import list_rules
 from tribin.llm.base import LLMProvider
@@ -60,11 +62,13 @@ def ensure_profiles(db: Database, root: Path, convention: Convention) -> list[Fo
 
 
 def make_context(root: Path, convention: Convention, llm: LLMProvider, settings: Settings,
-                 db: Database | None = None) -> ProposeContext:
+                 db: Database | None = None, prompt_style: str = DEFAULT_PROMPT_STYLE) -> ProposeContext:
     """Contexte complet utilisé par la ligne de commande et l'application."""
     db = db or Database(settings.db_path)
     profiles = ensure_profiles(db, root, convention)
-    ctx = ProposeContext(root=Path(root), convention=convention, llm=llm, profile=read_profile(settings))
+    ctx = ProposeContext(root=Path(root), convention=convention, llm=llm, profile=read_profile(settings),
+                         prompt_style=prompt_style)
+    ctx.tools = default_tools(Path(root), profiles, convention.excluded_paths)  # lister_dossiers sur la cartographie
     ctx.client_detector = lambda info: detect_client(info, convention)
     ctx.candidate_provider = lambda info, hint: select_candidates(info, profiles, convention, hint)
     ctx.examples_provider = lambda info, hint: similar_examples(db, info, hint, personal=convention.personal)

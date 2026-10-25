@@ -160,3 +160,89 @@ def test_prompt_lists_existing_projects(sandbox_dir: Path, settings):
     prompt = llm.prompts[0]
     assert "## Projets existants" in prompt and "VELOM/2025/2025-055_Catalogue-2026" in prompt
     assert "dossier vide" not in prompt
+
+
+# --- skill v2 : arborescence, candidats diversifiés, faux codes projet, client sur mots entiers -----------------
+
+
+def test_folder_tree_shows_what_exists_and_what_is_empty(sandbox_dir: Path):
+    from tribin.engine.candidates import folder_tree
+
+    conv = load_convention(sandbox_dir / "convention.yaml")
+    lines = folder_tree(scan_root(sandbox_dir / "root", conv))
+    by_name = {line.split(" — ")[0]: line for line in lines}
+    assert by_name["ACME"].startswith("ACME — 1") and "2025, 2026" in by_name["ACME"]
+    assert by_name["Administratif"] == "Administratif — 2 — Banque, Bulletins-de-paie"
+    from tribin.mapping.profiles import FolderProfile
+
+    assert folder_tree([FolderProfile(rel="Sante")]) == ["Sante — 0 — (vide)"]
+    many = [FolderProfile(rel="A")] + [FolderProfile(rel=f"A/s{i:02d}", file_count=1) for i in range(10)]
+    assert folder_tree(many, max_subfolders=8)[0].endswith(", … (10 sous-dossiers)")
+    assert folder_tree([FolderProfile(rel=f"D{i}") for i in range(5)], max_folders=3)[-1] == "… et 2 autres dossiers"
+
+
+def test_dates_are_not_project_codes():
+    from tribin.engine.candidates import PROJECT_CODE
+
+    assert PROJECT_CODE.findall("Facture du 2026-10-12 pour le projet 2026-042 et 2026-0421") == ["2026-042", "2026-0421"]
+    assert PROJECT_CODE.findall("période 2026-04") == ["2026-04"]  # un vrai code court reste possible
+
+
+def test_project_code_scores_the_project_segment_only(sandbox_dir: Path):
+    from tribin.engine.candidates import _folder_score, _tokens
+    from tribin.mapping.profiles import FolderProfile
+
+    conv = load_convention(sandbox_dir / "convention.yaml")
+    right = FolderProfile(rel="ACME/2026/2026-042_Campagne-Noel/06_Admin", file_count=1)
+    wrong = FolderProfile(rel="VELOM/2026/2026-0421_Autre/06_Admin", file_count=1)
+    assert _folder_score(_tokens("x"), {"2026-042"}, right, conv) > _folder_score(_tokens("x"), {"2026-042"}, wrong, conv)
+
+
+def test_zero_scores_are_diversified_by_top_folder(tmp_path: Path):
+    from tribin.engine.candidates import select_candidates
+    from tribin.extract import extract
+    from tribin.mapping.profiles import FolderProfile
+
+    from tribin import resources
+
+    conv = load_convention(Path(resources.__file__).with_name("convention.personal.yaml"))
+    (tmp_path / "IMG_0001.jpg").write_bytes(b"")
+    info = extract(tmp_path / "IMG_0001.jpg")
+    profiles = [FolderProfile(rel=f"Administratif/d{i:02d}", file_count=1, last_modified=1.0) for i in range(20)]
+    profiles += [FolderProfile(rel="Photos/2026", file_count=5, last_modified=9.0),
+                 FolderProfile(rel="Vehicule/Entretien", file_count=2, last_modified=5.0),
+                 FolderProfile(rel="startup", file_count=3, last_modified=2.0)]
+    rels = [c.rel for c in select_candidates(info, profiles, conv, None, limit=6)]
+    assert "Photos/2026" in rels and "Vehicule/Entretien" in rels and "startup" in rels and len(rels) <= 6
+    assert rels[0] != "Administratif/d00" or len([r for r in rels if r.startswith("Administratif")]) < 6
+
+
+def test_user_top_folders_are_always_candidates_in_personal_mode(tmp_path: Path):
+    from tribin.engine.candidates import select_candidates
+    from tribin.extract import extract
+    from tribin.mapping.profiles import FolderProfile
+
+    from tribin import resources
+
+    conv = load_convention(Path(resources.__file__).with_name("convention.personal.yaml"))
+    (tmp_path / "Facture-EDF.pdf").write_bytes(b"")
+    info = extract(tmp_path / "Facture-EDF.pdf")
+    profiles = [FolderProfile(rel=f"Factures/{y}", file_count=4) for y in range(2000, 2026)]
+    profiles.append(FolderProfile(rel="startup", file_count=0))
+    rels = [c.rel for c in select_candidates(info, profiles, conv, None, limit=15)]
+    assert "startup" in rels and len(rels) <= 15
+
+
+def test_client_detection_on_whole_words_only(sandbox_dir: Path):
+    from tribin.convention.loader import Client
+    from tribin.extract import base_info
+
+    conv = load_convention(sandbox_dir / "convention.yaml")
+    conv.clients.append(Client(code="TOTAL", name="Total Energies", aliases=["total"]))
+    info = base_info(sandbox_dir / "inbox" / "notes.txt")
+    info.text = "Le montant totalement réglé par Orange SA est de 12 EUR."
+    assert detect_client(info, conv) is None
+    info.text = "Facture Total Energies du mois"
+    assert detect_client(info, conv) == "TOTAL"
+    info.text = "Commande Acme Corp. pour le salon"  # flou sur des mots entiers : « acme corp » ≈ « Acme Corporation »
+    assert detect_client(info, conv) == "ACME"

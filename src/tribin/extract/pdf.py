@@ -23,6 +23,12 @@ def extract_pdf(path: Path, info: FileInfo) -> None:
     title = getattr(meta, "title", None)
     if title:
         info.metadata["titre"] = str(title)[:200]
+    try:
+        created = getattr(meta, "creation_date", None)
+    except Exception:  # date illisible dans les métadonnées
+        created = None
+    if created:
+        info.metadata["date_creation_document"] = created.strftime("%Y-%m-%d")
     parts: list[str] = []
     for page in reader.pages[:MAX_PAGES]:
         parts.append(page.extract_text() or "")

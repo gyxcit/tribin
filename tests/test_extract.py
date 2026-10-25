@@ -213,3 +213,22 @@ def test_eml_legacy_office_archive_and_secrets(tmp_path: Path, sandbox_dir: Path
     config.write_text("projet: Stagio\npassword: tres-secret\nAPI_KEY = abc\n")
     text = extract(config).text
     assert "projet: Stagio" in text and "tres-secret" not in text and "abc" not in text
+
+
+def test_document_creation_date_in_metadata(tmp_path: Path):
+    from sandbox_files import write_file
+
+    write_file(tmp_path / "lettre.docx", {"kind": "docx", "title": "Lettre", "lines": ["Bonjour"], "mtime": "2024-03-05"})
+    assert extract(tmp_path / "lettre.docx").metadata["date_creation_document"] == "2024-03-05"
+    write_file(tmp_path / "plan.xlsx", {"kind": "xlsx", "sheets": {"Plan": [["a", 1]]}, "mtime": "2024-04-06"})
+    assert extract(tmp_path / "plan.xlsx").metadata["date_creation_document"] == "2024-04-06"
+    write_file(tmp_path / "deck.pptx", {"kind": "pptx", "slides": [("Titre", "Corps")], "mtime": "2024-05-07"})
+    assert extract(tmp_path / "deck.pptx").metadata["date_creation_document"] == "2024-05-07"
+    from pypdf import PdfWriter
+
+    writer = PdfWriter()
+    writer.add_blank_page(width=200, height=200)
+    writer.add_metadata({"/CreationDate": "D:20240305100000+00'00'"})
+    with open(tmp_path / "doc.pdf", "wb") as fh:
+        writer.write(fh)
+    assert extract(tmp_path / "doc.pdf").metadata["date_creation_document"] == "2024-03-05"

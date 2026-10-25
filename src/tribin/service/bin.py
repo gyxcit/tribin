@@ -11,7 +11,7 @@ from pathlib import Path
 from tribin.config import STAGING_DIRNAME, Settings, is_within, read_api_key
 from tribin.convention.loader import Convention, ConventionError, load_convention
 from tribin.db import Database
-from tribin.convention.naming import fit_to_path
+from tribin.convention.naming import fit_to_path, split_extension
 from tribin.engine.context import folder_signature, make_context
 from tribin.engine.proposer import ProposeContext, has_placeholder, propose
 from tribin.engine.similar import MIN_WORD, distinctive_words
@@ -20,6 +20,7 @@ from tribin.fs.filters import ExclusionMatcher, NotProcessable, check_processabl
 from tribin.ids import new_id
 from tribin.llm import make_provider
 from tribin.learning.corrections import record_correction
+from tribin.learning.rules_store import refresh_confirmed_rules
 from tribin.learning.signals import check_moved_files, maybe_summarize, remember_placement
 from tribin.llm.base import LLMError, Usage
 from tribin.safety import restore
@@ -42,7 +43,7 @@ class _NoLLM:
     def __init__(self, reason: str, model: str):
         self.reason, self.model, self.last_usage = reason, model, Usage()
 
-    def complete_json(self, system, user, schema, images=None):
+    def complete_json(self, system, user, schema, images=None, tools=None, call_tool=None):
         raise LLMError(self.reason)
 
 
@@ -247,7 +248,13 @@ class BinService:
         for lock in locks:  # toujours dans le même ordre (alphabétique) : pas d'interblocage
             lock.acquire()
         try:
-            proposal = propose(extract(staged), self.context(Path(item.root)), self._dropped_together(item, set(words)))
+            info = extract(staged)
+            # Le fichier est lu dans le dossier tampon : l'IA doit voir son vrai nom (sans suffixe « _2 ») et son vrai
+            # dossier d'origine (Téléchargements, Clients/ACME…), pas « _TriBin/a_trier ».
+            original = Path(item.original_path)
+            info.name, info.extension = original.name, split_extension(original.name)[1].lower()
+            info.origin_folder = str(original.parent)
+            proposal = propose(info, self.context(Path(item.root)), self._dropped_together(item, set(words)))
             proposal.file_id = item.file_id
             item.proposal, item.status, item.error = proposal, "ready", None
         except BinError as exc:
@@ -485,7 +492,9 @@ class BinService:
                               item.proposal, v.target_folder, op.destination.name, v.decision)
             remember_placement(self.db, op.operation_id, op.destination, Path(item.root), v.target_folder,
                                op.destination.name, original, item.proposal.client_hint)
-            if v.decision not in ("accepted", "auto"):
+            if v.decision == "accepted":
+                refresh_confirmed_rules(self.db)  # même modèle de nom validé plusieurs fois : règle confirmée
+            elif v.decision != "auto":
                 maybe_summarize(self.db, self.context(Path(item.root)).llm, personal=convention.personal)
         except Exception:
             log.exception("learning hook failed")

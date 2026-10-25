@@ -5,6 +5,7 @@
 
 # Données de test (générées ou réelles)
 sandbox/
+sandbox-perso/
 testset/
 eval_results/
 

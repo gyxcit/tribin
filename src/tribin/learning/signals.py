@@ -88,9 +88,25 @@ class RulesSummary(BaseModel):
 
 SUMMARY_SYSTEM = (
     "Tu résumes les préférences de rangement d'un utilisateur à partir de ses corrections. Écris au plus 8 règles "
-    "courtes, concrètes et vérifiables, en français, à la deuxième personne (ex. « Tu ranges les devis signés dans "
-    "06_Admin »). N'invente rien. Ne contredis jamais la convention d'équipe. Réponds en JSON : {\"rules\": [...]}."
+    "courtes, concrètes et vérifiables, en français, à la deuxième personne, qui disent dans quel dossier va quel "
+    "genre de document (ex. « Tu ranges les devis signés dans 06_Admin ») ou comment tu le décris (ex. « Tu nommes "
+    "les relevés par banque et par mois »). Jamais de règle sur le format du nom (date, séparateurs, version, "
+    "majuscules) : le nom est assemblé par le programme, pas par toi. N'invente rien. Ne contredis jamais la "
+    "convention d'équipe. Réponds en JSON : {\"rules\": [...]}."
 )
+PERSONAL_SUMMARY_SYSTEM = (
+    "Tu résumes les habitudes de rangement d'une personne (ses papiers et fichiers personnels) à partir de ses "
+    "corrections. Écris au plus 8 règles courtes, concrètes et vérifiables, en français, à la deuxième personne, "
+    "qui disent dans quel dossier va quel genre de document (ex. « Tu ranges les factures du vétérinaire dans "
+    "Animaux ») ou comment tu le décris (ex. « Tu gardes le nom de la personne dans la description »). Jamais de "
+    "règle sur le format du nom (date, séparateurs, version, majuscules) : le nom est assemblé par le programme, pas "
+    "par toi. N'invente rien. Réponds en JSON : {\"rules\": [...]}."
+)
+
+
+def summary_system(personal: bool) -> str:
+    """Consigne de synthèse des règles selon le mode (Particulier : ni équipe ni dossiers d'agence)."""
+    return PERSONAL_SUMMARY_SYSTEM if personal else SUMMARY_SYSTEM
 
 
 def maybe_summarize(db: Database, llm: LLMProvider | None, every: int = SUMMARY_EVERY, force: bool = False,
@@ -109,7 +125,7 @@ def maybe_summarize(db: Database, llm: LLMProvider | None, every: int = SUMMARY_
         user += "\n\nRègles actuelles (éventuellement modifiées par l'utilisateur, à conserver sauf contradiction) :\n" + \
                 "\n".join(f"- {r}" for r in current)
     try:
-        summary = llm.complete_json(SUMMARY_SYSTEM, user, RulesSummary)
+        summary = llm.complete_json(summary_system(personal), user, RulesSummary)
     except LLMError as exc:
         log.warning("rules summary failed: %s", exc)
         return False

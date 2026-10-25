@@ -207,6 +207,11 @@ class DetailPanel(QFrame):
         self.reasoning.setStyleSheet("color: #3A4063;")
         self.reasoning.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         inner.addWidget(self.reasoning)
+        self.evidence = QLabel()  # indices relevés par l'IA avant de décider (skill v2)
+        self.evidence.setWordWrap(True)
+        self.evidence.setStyleSheet("color: #6B7194; font-size: 12px;")
+        self.evidence.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        inner.addWidget(self.evidence)
         self.warnings = QLabel()
         self.warnings.setObjectName("Warning")
         self.warnings.setWordWrap(True)
@@ -355,6 +360,15 @@ class DetailPanel(QFrame):
                 self.reasoning.setText(item.error or "Erreur pendant l'analyse.")
             else:
                 self.reasoning.setText(p.reasoning if p and p.reasoning else "—")
+            from tribin.engine.tools import looked_at
+
+            evidence = [e for e in (p.evidence if p and ready else []) if e]
+            lines = ["Indices : " + " · ".join(evidence)] if evidence else []
+            looked = looked_at(p.tool_calls) if p and ready else []
+            if looked:
+                lines.append("L'IA a regardé : " + ", ".join(looked))
+            self.evidence.setText("\n".join(lines))
+            self.evidence.setVisible(bool(lines))
             shown = self.reasoning.text()
             others = [w for w in (p.warnings if p else [])
                       if not w.startswith((HESITATION, NEW_VERSION)) and w not in shown]  # pas deux fois le même message

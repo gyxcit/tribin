@@ -238,7 +238,8 @@ def test_personal_mode_creates_missing_category(settings, sb):
     assert [i.file_id for i in report.done] == [item.file_id]
     assert (sb / "root" / "Animaux" / "2026-10-12_Vaccin-chat.pdf").exists()
     assert "Animaux" in load_convention(path).category_codes()  # ajoutée à la liste
-    assert "Mode : personnel" in llm.prompts[0] and "Clients" not in llm.prompts[0]
+    assert "Mode : Particulier" in llm.systems[0] and "Convention de rangement" in llm.systems[0]
+    assert "Clients (code" not in llm.systems[0] and "Projets existants" not in llm.prompts[0]
 
 
 def test_personal_mode_accepts_existing_folder_outside_categories(settings, sb):
@@ -361,7 +362,7 @@ def test_folder_creation_permission(settings, sb):
     svc, _ = personal_service(settings, sb, llm)
     assert svc.creates_folders() and AppConfig().creates_folders("work") is False
     item = svc.analyze(svc.drop(sb / "inbox" / "scan0042.pdf").file_id)
-    assert "CRÉE un dossier dédié" in llm.systems[-1]
+    assert "crée le bon dossier" in llm.systems[-1]
     prepared = svc.prepare([Validation(item.file_id, item.proposal.target_folder, item.proposal.new_name, "accepted")])
     assert not prepared.needs_confirmation  # autorisé : créés sans demander (annulables)
 
@@ -370,7 +371,7 @@ def test_folder_creation_permission(settings, sb):
     svc.update_config(cfg)
     assert not svc.creates_folders()
     other = svc.analyze(svc.drop(sb / "inbox" / "BC_4512.pdf").file_id)
-    assert "Ne crée AUCUN dossier" in llm.systems[-1]
+    assert "Ne crée aucun dossier" in llm.systems[-1]
     assert any("avec votre accord" in w for w in other.proposal.warnings)
     prepared = svc.prepare([Validation(other.file_id, other.proposal.target_folder, other.proposal.new_name,
                                        "accepted")])

@@ -39,7 +39,7 @@ def smart_llm() -> FakeLLM:
     """IA simulée qui suit les exemples de corrections présents dans le prompt (comme le demande la consigne)."""
 
     def answer(prompt: str) -> LLMProposal:
-        section = prompt.split("## Exemples de corrections passées", 1)
+        section = prompt.split("## Corrections passées semblables", 1)
         if len(section) == 2:
             match = re.search(r"→ (\S+)/[^/\s]+ \(l'IA proposait", section[1])
             if match:
@@ -74,7 +74,7 @@ def test_three_coherent_corrections_change_the_fourth(settings, sb):
     assert first.proposal.target_folder == f"{NOEL}/06_Admin"
     fourth = svc.analyze(svc.drop(sb / "inbox" / "devis_imprimeur_4.txt").file_id)
     assert fourth.proposal.target_folder == f"{NOEL}/03_Execution"
-    assert "Exemples de corrections passées" in llm.prompts[-1] and "devis_imprimeur_1.txt" in llm.prompts[-1]
+    assert "Corrections passées semblables" in llm.prompts[-1] and "devis_imprimeur_1.txt" in llm.prompts[-1]
     assert list_corrections(svc.db)[-1].decision == "edited"  # la plus ancienne : la vraie correction
 
 
@@ -87,7 +87,7 @@ def test_correction_against_team_convention_is_not_learned(settings, sb):
     assert all(c.contradicts_team for c in corrections)
     item = svc.analyze(svc.drop(sb / "inbox" / "devis_imprimeur_4.txt").file_id)
     assert item.proposal.target_folder == f"{NOEL}/06_Admin"  # préférence non apprise
-    assert "Exemples de corrections" not in llm.prompts[-1]
+    assert "Corrections passées" not in llm.prompts[-1]
     alerts = team_rule_alerts(svc.db)
     assert any("structure" in a for a in alerts) and any("nommage" in a for a in alerts)
 
@@ -106,7 +106,7 @@ def test_personal_mode_learns_from_folders_outside_the_categories(settings, sb):
         place(svc, sb, f"devis_imprimeur_{i}.txt", folder="startup")
     assert not any(c.contradicts_team for c in list_corrections(svc.db))
     svc.analyze(svc.drop(sb / "inbox" / "devis_imprimeur_3.txt").file_id)
-    assert "→ startup/" in llm.prompts[-1].split("## Exemples de corrections passées")[1]
+    assert "→ startup/" in llm.prompts[-1].split("## Corrections passées semblables")[1]
     assert team_rule_alerts(svc.db) == []
 
     # corrections enregistrées avant cette version (marquées « contraires à l'équipe ») : utilisées quand même
@@ -140,13 +140,16 @@ def test_rules_summary_every_20_and_editable(settings, sb):
     assert not maybe_summarize(svc.db, summarizer, every=20)  # 3 corrections : pas encore
     assert maybe_summarize(svc.db, summarizer, every=1)
     assert "l'IA proposait" in summarizer.prompts[0]
-    rules = list_rules(svc.db)
+    rules = list_rules(svc.db, kind="learned")
     assert [r.text for r in rules] == ["Tu ranges les devis d'imprimeur dans 03_Execution."]
+    # deux validations sans modification du même modèle de nom : règle confirmée créée sans ouvrir la page Règles
+    assert [r.kind for r in list_rules(svc.db, kind="confirmed")] == ["confirmed"]
     update_rule(svc.db, rules[0].id, "Tu ranges les devis d'imprimeur dans 03_Execution, sauf les signés.")
     svc.analyze(svc.drop(sb / "inbox" / "devis_imprimeur_5.txt").file_id)
-    assert "sauf les signés" in llm.prompts[-1] and "Règles apprises" in llm.prompts[-1]
+    assert "sauf les signés" in llm.systems[-1] and "Règles de cet utilisateur" in llm.systems[-1]
+    assert "sauf les signés" not in llm.prompts[-1]  # le contexte stable est dans le system (cache de prompt)
     delete_rule(svc.db, rules[0].id)
-    assert list_rules(svc.db) == []
+    assert list_rules(svc.db, kind="learned") == []
 
 
 def test_implicit_signal_when_moved_by_hand(settings, sb):
@@ -226,3 +229,33 @@ def test_rule_kinds_confirmed_rules_and_text_view(tmp_path):
     assert rules["Les CV vont dans Etudes/CV."].kind == "manual"
     apply_text(db, "Les CV vont dans Etudes/CV.")
     assert [r.text for r in list_rules(db)] == ["Les CV vont dans Etudes/CV."]  # lignes effacées : supprimées
+
+
+def test_examples_need_a_similar_name_not_just_the_same_extension(tmp_path):
+    """Une correction sur un CV ne sert pas d'exemple pour un relevé bancaire parce que les deux sont des PDF."""
+    from tribin.extract import base_info
+    from tribin.learning.corrections import record_correction
+    from tribin.models import NameFields, Proposal
+
+    db = Database(tmp_path / "x.db")
+    conv = load_convention(REPO / "src/tribin/resources/convention.personal.yaml")
+    ai = Proposal(file_id="f", target_folder="Administratif", new_name="cv.pdf", fields=NameFields(), confidence=0.9,
+                  reasoning="", prompt_version="", model="")
+    record_correction(db, conv, "CV Regis 2026.pdf", "", None, ai, "Etudes/CV", "2026-10-19_CV-Regis.pdf", "edited")
+    for name in ("Releve_LCL_2026-09.pdf", "IMG_3381.pdf"):
+        (tmp_path / name).write_bytes(b"")
+        assert similar_examples(db, base_info(tmp_path / name), None, personal=True) == []
+    (tmp_path / "cv regis v2.pdf").write_bytes(b"")
+    assert len(similar_examples(db, base_info(tmp_path / "cv regis v2.pdf"), None, personal=True)) == 1
+    (tmp_path / "Lettre Regis.docx").write_bytes(b"")  # mot distinctif commun, extension différente
+    assert len(similar_examples(db, base_info(tmp_path / "Lettre Regis.docx"), None, personal=True)) == 1
+
+
+def test_rules_summary_prompt_by_mode():
+    from tribin.learning.signals import summary_system
+
+    work, personal = summary_system(False), summary_system(True)
+    assert "06_Admin" in work and "convention d'équipe" in work
+    assert "06_Admin" not in personal and "équipe" not in personal
+    for text in (work, personal):
+        assert "Jamais de règle sur le format du nom" in text

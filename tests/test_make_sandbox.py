@@ -43,3 +43,24 @@ def test_refuses_foreign_folder(tmp_path: Path):
     with pytest.raises(SystemExit):
         make_sandbox(dest)
     assert (dest / "precieux.txt").exists()
+
+
+def test_personal_testset(tmp_path: Path):
+    from make_sandbox_perso import make_sandbox_perso
+
+    dest = tmp_path / "perso"
+    stats = make_sandbox_perso(dest)
+    assert 25 <= stats["inbox_files"] <= 30
+    conv = yaml.safe_load((dest / "convention.yaml").read_text(encoding="utf-8"))
+    assert conv["mode"] == "personal" and "startup" not in [c["code"] for c in conv["structure"]["categories"]]
+    assert (dest / "root" / "startup").is_dir() and len(list((dest / "root" / "startup").iterdir())) == 2
+    with open(dest / "expected.csv", encoding="utf-8") as fh:
+        rows = list(csv.DictReader(fh))
+    inbox = {p.name for p in (dest / "inbox").iterdir()}
+    assert {r["file"] for r in rows} == inbox
+    names = [r["file"] for r in rows]
+    assert sum(n.startswith("Planche de logos Sarah Mbossa") for n in names) == 3  # une série
+    assert not (dest / "root" / "Graphisme" / "Sarah-Mbossa").exists()  # sous-dossier à créer sous « Graphisme »
+    for row in rows:
+        assert (dest / "root" / row["expected_folder"].split("/")[0]).is_dir(), row["expected_folder"]
+    make_sandbox_perso(dest)  # régénération propre

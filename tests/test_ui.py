@@ -50,7 +50,8 @@ def controller(qapp, settings, sandbox_dir, monkeypatch):
     shutil.copytree(sandbox_dir, sb)
     monkeypatch.setattr(app_mod, "is_being_written", lambda path, delay=2.0: False)
     llm = fixed(target_folder=f"{NOEL}/06_Admin", date="2026-10-12", description="Devis impression", confidence=0.9,
-                reasoning="Devis de l'imprimeur")
+                reasoning="Devis de l'imprimeur", evidence=["en-tête DEVIS", "projet 2026-042"])
+    llm.tool_script = [("lister_dossiers", {"chemin": ""})]
     svc = BinService(settings, provider_factory=lambda s, m=None: llm)
     svc.update_config(AppConfig(roots=[str(sb / "root")], convention_path=str(sb / "convention.yaml"),
                                 onboarding_done=True, privacy_accepted=True))
@@ -86,6 +87,7 @@ def test_drop_shows_proposal_in_bin_window(qapp, controller):
     assert win.detail.name.text() == "2026-10-12_ACME_2026-042_Devis-impression.pdf"
     assert win.detail.folder == f"{NOEL}/06_Admin"
     assert "Devis de l'imprimeur" in win.detail.reasoning.text()
+    assert win.detail.evidence.text() == "Indices : en-tête DEVIS · projet 2026-042\nL'IA a regardé : racine"
     assert win.detail.pill.text() == "Sûr · 90 %"
     assert win.detail.original.text() == "scan0042.pdf"
     assert "1 fichier" in controller.tray.toolTip() and win.pending_count.text() == "1"
@@ -267,6 +269,12 @@ def test_empty_state_edits_and_search(qapp, controller):
     win.queue.search.clear()
     win.queue.set_tab("check")
     assert win.queue.order == []  # les deux fichiers sont prêts : rien à vérifier
+    assert win.queue.empty.isVisibleTo(win.queue) and "Rien à vérifier" in win.queue.empty.text()
+    assert not win.queue.list.isVisibleTo(win.queue) and win.detail_pages.currentIndex() == 0  # la liste reste à gauche
+    assert "Aucun fichier dans cet onglet" in win.detail_placeholder.text()
+    win.queue.set_tab("ready")
+    assert len(win.queue.order) == 2 and win.detail_pages.currentIndex() == 1 and not win.queue.empty.isVisibleTo(win.queue)
+    win.queue.set_tab("check")
     win.select_file(first.file_id)  # sélectionner un fichier masqué revient à « Tous »
     assert win.queue.tab == "all" and win.queue.current_file_id() == first.file_id
 

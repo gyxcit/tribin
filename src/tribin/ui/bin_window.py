@@ -219,7 +219,15 @@ class BinWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.addWidget(self.queue)
-        layout.addWidget(self.detail, 1)
+        # Sans sélection, le détail laisse la place à un message : la liste reste à gauche au lieu de flotter au milieu
+        self.detail_placeholder = QLabel("Sélectionnez un fichier dans la liste pour voir la proposition.")
+        self.detail_placeholder.setObjectName("Empty")
+        self.detail_placeholder.setWordWrap(True)
+        self.detail_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.detail_pages = QStackedWidget()
+        self.detail_pages.addWidget(self.detail_placeholder)
+        self.detail_pages.addWidget(self.detail)
+        layout.addWidget(self.detail_pages, 1)
 
         empty = QWidget()
         column = QVBoxLayout(empty)
@@ -318,6 +326,9 @@ class BinWindow(QMainWindow):
         item = self.current_item() if file_id else None
         self.detail.show_item(item, *(self._values(item) if item else ("", "")), categories=self._categories(),
                               personal=self._personal())
+        self.detail_placeholder.setText("Aucun fichier dans cet onglet." if not self.queue.order
+                                        else "Sélectionnez un fichier dans la liste pour voir la proposition.")
+        self.detail_pages.setCurrentIndex(1 if item else 0)
 
     def _detail_edited(self) -> None:
         item = self.current_item()

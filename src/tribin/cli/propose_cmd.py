@@ -12,6 +12,7 @@ from rich.table import Table
 from tribin.cli.common import CliError, console, load_convention_or_fail, print_proposal, proposals_table
 from tribin.config import REPO_ROOT, get_settings
 from tribin.engine.context import make_context
+from tribin.engine.prompts import DEFAULT_PROMPT_STYLE, PROMPT_STYLES
 from tribin.engine.proposer import ProposeContext, propose
 from tribin.extract import extract
 from tribin.fs.filters import ExclusionMatcher, NotProcessable, check_processable
@@ -19,7 +20,7 @@ from tribin.llm import make_provider
 from tribin.llm.base import LLMError
 
 
-def _context(root: Path, convention_path: Path, model: str | None) -> ProposeContext:
+def _context(root: Path, convention_path: Path, model: str | None, prompt_style: str = DEFAULT_PROMPT_STYLE) -> ProposeContext:
     if not root.is_dir():
         raise CliError(f"Racine introuvable : {root}")
     settings = get_settings()
@@ -28,11 +29,11 @@ def _context(root: Path, convention_path: Path, model: str | None) -> ProposeCon
         llm = make_provider(settings, model)
     except LLMError as exc:
         raise CliError(str(exc)) from exc
-    return make_context(root, convention, llm, settings)
+    return make_context(root, convention, llm, settings, prompt_style=prompt_style)
 
 
 def cmd_propose(args: argparse.Namespace) -> int:
-    ctx = _context(args.root, args.convention, args.model)
+    ctx = _context(args.root, args.convention, args.model, args.prompt)
     try:
         check_processable(args.file, ctx.root, ExclusionMatcher(ctx.convention.excluded_paths))
     except NotProcessable as exc:
@@ -47,7 +48,7 @@ def cmd_propose(args: argparse.Namespace) -> int:
 
 
 def cmd_propose_dir(args: argparse.Namespace) -> int:
-    ctx = _context(args.root, args.convention, args.model)
+    ctx = _context(args.root, args.convention, args.model, args.prompt)
     matcher = ExclusionMatcher(ctx.convention.excluded_paths)
     files, skipped = [], []
     for path in sorted(args.folder.iterdir(), key=lambda p: p.name.lower()):
@@ -76,7 +77,7 @@ def cmd_eval(args: argparse.Namespace) -> int:
     except LLMError as exc:
         raise CliError(str(exc)) from exc
     with console.status("Évaluation en cours (aucun fichier n'est déplacé)…"):
-        report = run_eval(testset, lambda root, conv: make_context(root, conv, llm, settings))
+        report = run_eval(testset, lambda root, conv: make_context(root, conv, llm, settings, prompt_style=args.prompt))
     table = Table(title=f"Évaluation — {report.model} — prompt {report.prompt_version}")
     table.add_column("Indicateur")
     table.add_column("Valeur", justify="right")
@@ -87,7 +88,14 @@ def cmd_eval(args: argparse.Namespace) -> int:
         "confiance_bonnes": "Confiance moyenne (bonnes)", "confiance_mauvaises": "Confiance moyenne (mauvaises)",
         "erreurs_signalees_pct": "Erreurs signalées « à vérifier » (%)",
         "bonnes_signalees_pct": "Bonnes réponses signalées à tort (%)",
+        "erreurs_confiantes": "Erreurs à plus de 0,8 de confiance",
+        "dates_correctes_pct": "Dates du nom correctes (%)", "mots_cles_conserves_pct": "Mots-clés conservés dans le nom (%)",
+        "sans_date_dans_le_nom": "Noms proposés sans date",
         "temps_moyen_s": "Temps moyen par fichier (s)", "cout_moyen_usd": "Coût estimé par fichier ($)",
+        "appels_outil_par_fichier": "Appels d'outil par fichier", "fichiers_avec_appel_outil_pct": "Fichiers avec appel d'outil (%)",
+        "dossiers_crees_en_double": "Dossiers créés alors que le bon existait",
+        "jetons_entree_par_fichier": "Jetons d'entrée par fichier", "jetons_sortie_par_fichier": "Jetons de sortie par fichier",
+        "part_lue_depuis_le_cache_pct": "Part lue depuis le cache (%)",
         "a_traiter_manuellement": "À traiter manuellement",
     }
     for key, value in report.metrics.items():
@@ -116,6 +124,7 @@ def register(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--root", type=Path, required=True)
     p.add_argument("--convention", type=Path, required=True)
     p.add_argument("--model")
+    p.add_argument("--prompt", choices=PROMPT_STYLES, default=DEFAULT_PROMPT_STYLE, help="consignes de l'IA (v2 ou ancien p7)")
     p.add_argument("--json", action="store_true", help="sortie JSON")
     p.set_defaults(func=cmd_propose)
 
@@ -124,11 +133,13 @@ def register(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--root", type=Path, required=True)
     p.add_argument("--convention", type=Path, required=True)
     p.add_argument("--model")
+    p.add_argument("--prompt", choices=PROMPT_STYLES, default=DEFAULT_PROMPT_STYLE, help="consignes de l'IA (v2 ou ancien p7)")
     p.set_defaults(func=cmd_propose_dir)
 
     p = sub.add_parser("eval", help="évaluer la qualité des propositions sur un jeu de test")
     p.add_argument("testset", type=Path)
     p.add_argument("--model")
+    p.add_argument("--prompt", choices=PROMPT_STYLES, default=DEFAULT_PROMPT_STYLE, help="consignes de l'IA (v2 ou ancien p7)")
     p.add_argument("-v", "--verbose", action="store_true", help="détailler les erreurs")
     p.add_argument("--min-score", type=float, help="échouer si moins de N %% de dossiers corrects (ex. 70)")
     p.set_defaults(func=cmd_eval)
