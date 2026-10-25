@@ -605,3 +605,26 @@ def test_history_rows_expand_and_home_shows_stats(qapp, controller):
     assert "Bonjour" in home.greeting.text() or "Bonsoir" in home.greeting.text()
     recent = [w for w in home.findChildren(QLabel) if "Devis-impression" in w.toolTip() and w.isVisibleTo(home)]
     assert recent  # parmi les 5 derniers rangements
+
+
+def test_auto_threshold_slider_and_switch(qapp, controller):
+    from tribin.ui.settings import SettingsDialog
+
+    dialog = SettingsDialog(controller)
+    controller.extra.append(dialog)
+    assert not dialog.auto_file.isChecked() and not dialog.threshold.slider.isEnabled()
+    dialog.auto_file.click()  # interrupteur
+    assert dialog.auto_file.isChecked() and dialog.threshold.slider.isEnabled()
+    dialog.threshold.setValue(95)
+    assert dialog.threshold.value_label.text() == "95 %" and "95 %" in dialog.threshold_hint.text()
+    dialog.threshold.setValue(70)
+    assert "à regarder" in dialog.threshold_hint.text()
+    dialog.threshold.setValue(95)
+    dialog._save()
+    cfg = controller.service.config
+    assert cfg.auto_file and cfg.auto_min_confidence == 0.95
+
+    controller.drop_paths([controller.sb / "inbox" / "scan0042.pdf"])  # IA à 90 % : sous le seuil de 95 %
+    assert wait(qapp, lambda: ready_items(controller, 1))
+    assert wait(qapp, lambda: controller._notice_timer.isActive() or controller._notice["review"], 5)
+    assert len(controller.service.pending()) == 1  # pas rangé tout seul

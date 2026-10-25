@@ -142,7 +142,8 @@ class AppController:
         def analyzed(_) -> None:
             self.refresh_queue()
             if self.service.config.auto_file:
-                self._run(self.service.auto_file, [file_id], AUTO_MIN_CONFIDENCE, on_done=self._auto_done)
+                threshold = self.service.config.auto_min_confidence or AUTO_MIN_CONFIDENCE
+                self._run(self.service.auto_file, [file_id], threshold, on_done=self._auto_done)
 
         self._run(self.service.analyze, file_id, on_done=analyzed)
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from PySide6.QtCore import QFileInfo, QRectF, QSize, Qt
+from PySide6.QtCore import QFileInfo, QRectF, QSize, Qt, QVariantAnimation, Signal
 from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QFileIconProvider,
@@ -16,12 +16,13 @@ from PySide6.QtWidgets import (
     QPushButton,
     QRadioButton,
     QSizePolicy,
+    QSlider,
     QVBoxLayout,
     QWidget,
 )
 
 from tribin.service.queue import QueueItem
-from tribin.ui.theme import level_for, pill_style
+from tribin.ui.theme import TEAL, level_for, pill_style
 
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".tif", ".tiff"}
 PREVIEW_EXT = {".pdf", ".ai", ".psd"}
@@ -392,3 +393,105 @@ def thumbnail(path: Path, width: int, height: int | None = None) -> QPixmap:
         return pix.scaled(width, height, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
     side = min(width, height)
     return QFileIconProvider().icon(QFileInfo(str(path))).pixmap(side, side)
+
+
+# --- interrupteur et curseur de seuil ---------------------------------------------------------------
+
+
+class ToggleSwitch(QPushButton):
+    """Interrupteur marche / arrêt (bouton cochable dessiné comme un interrupteur, bouton animé)."""
+
+    def __init__(self, checked: bool = False):
+        super().__init__()
+        self.setCheckable(True)
+        self.setChecked(checked)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFixedSize(46, 26)
+        self.setStyleSheet("QPushButton { border: none; background: transparent; padding: 0; }")
+        self._position = 1.0 if checked else 0.0
+        self._animation = QVariantAnimation(self)
+        self._animation.setDuration(140)
+        self._animation.valueChanged.connect(self._move)
+        self.toggled.connect(self._animate)
+
+    def _animate(self, checked: bool) -> None:
+        self._animation.stop()
+        if not self.isVisible():  # pas encore affiché : position finale tout de suite
+            self._move(1.0 if checked else 0.0)
+            return
+        self._animation.setStartValue(self._position)
+        self._animation.setEndValue(1.0 if checked else 0.0)
+        self._animation.start()
+
+    def _move(self, value) -> None:
+        self._position = float(value)
+        self.update()
+
+    def paintEvent(self, event) -> None:  # noqa: N802 — API Qt
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setPen(Qt.PenStyle.NoPen)
+        off, on = QColor("#C9CDE6"), QColor(TEAL)
+        if not self.isEnabled():
+            off = on = QColor("#E2E5EF")
+        t = self._position
+        track = QColor(int(off.red() + (on.red() - off.red()) * t), int(off.green() + (on.green() - off.green()) * t),
+                       int(off.blue() + (on.blue() - off.blue()) * t))
+        p.setBrush(track)
+        p.drawRoundedRect(QRectF(0, 0, self.width(), self.height()), self.height() / 2, self.height() / 2)
+        d = self.height() - 6
+        p.setBrush(QColor("white"))
+        p.drawEllipse(QRectF(3 + (self.width() - d - 6) * t, 3, d, d))
+        p.end()
+
+
+class ThresholdSlider(QWidget):
+    """Seuil de confiance : barre colorée (ambre « à regarder » -> turquoise « sûr »), curseur et valeur en %."""
+
+    changed = Signal(int)
+
+    def __init__(self, value: int = 80, minimum: int = 60, maximum: int = 95, step: int = 5):
+        super().__init__()
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(14)
+        self.slider = QSlider(Qt.Orientation.Horizontal)
+        self.slider.setRange(minimum, maximum)
+        self.slider.setSingleStep(step)
+        self.slider.setPageStep(step)
+        self.slider.setTickInterval(step)
+        self.slider.setValue(value)
+        self.slider.setCursor(Qt.CursorShape.PointingHandCursor)
+        sure = (80 - minimum) / (maximum - minimum)
+        self.slider.setStyleSheet(f"""
+            QSlider::groove:horizontal {{ height: 8px; border-radius: 4px;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #F5A524, stop:{sure:.2f} #F5A524,
+                                            stop:{min(1.0, sure + 0.01):.2f} #14B8A6, stop:1 #14B8A6); }}
+            QSlider::groove:horizontal:disabled {{ background: #E2E5EF; }}
+            QSlider::handle:horizontal {{ background: white; border: 3px solid #1F2544; width: 14px; height: 14px;
+                margin: -6px 0; border-radius: 10px; }}
+            QSlider::handle:horizontal:disabled {{ border-color: #C9CDE6; }}
+        """)
+        self.slider.setAccessibleName("Seuil de confiance")
+        self.value_label = QLabel()
+        self.value_label.setMinimumWidth(52)
+        self.value_label.setStyleSheet("font-size: 16px; font-weight: 700;")
+        layout.addWidget(self.slider, 1)
+        layout.addWidget(self.value_label)
+        self.slider.valueChanged.connect(self._changed)
+        self._changed(self.slider.value())
+
+    def _changed(self, value: int) -> None:
+        step = self.slider.singleStep()
+        snapped = round(value / step) * step
+        if snapped != value:
+            self.slider.setValue(snapped)
+            return
+        self.value_label.setText(f"{value} %")
+        self.changed.emit(value)
+
+    def value(self) -> int:
+        return self.slider.value()
+
+    def setValue(self, value: int) -> None:  # noqa: N802 — même nom que QSlider
+        self.slider.setValue(value)

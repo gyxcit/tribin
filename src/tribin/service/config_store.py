@@ -16,6 +16,7 @@ class AppConfig(BaseModel):
     provider: str = ""  # vide : fournisseur des réglages (.env) ; sinon "anthropic", "gemini" ou "mistral"
     model: str = ""  # vide : modèle par défaut des réglages (.env)
     auto_file: bool = False  # ranger tout seul les propositions sûres ; les autres attendent un avis
+    auto_min_confidence: float = 0.8  # seuil du rangement automatique (réglable de 60 à 95 %)
     hotkey: bool = True  # Ctrl + Alt + T : envoie la sélection de l'Explorateur à TriBin (Windows)
     onboarding_done: bool = False
     privacy_accepted: bool = False

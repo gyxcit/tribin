@@ -38,7 +38,15 @@ from tribin.service.bin import AUTO_MIN_CONFIDENCE
 from tribin.service.conventions import create_convention, current_mode
 from tribin.service.profile import PRIVACY_NOTICE, save_profile
 from tribin.ui import system_integration
-from tribin.ui.components import ApiKeyField, ChoiceCard, divider, muted, section
+from tribin.ui.components import (
+    ApiKeyField,
+    ChoiceCard,
+    ThresholdSlider,
+    ToggleSwitch,
+    divider,
+    muted,
+    section,
+)
 from tribin.ui.folder_picker import excluded_picker, roots_picker
 from tribin.ui.hotkey import HOTKEY_LABEL
 from tribin.ui.icons import line_icon
@@ -205,14 +213,59 @@ class SettingsDialog(QDialog):
         remap.clicked.connect(self.c.remap)
         page.add_row("Convention de rangement", "Fichier partagé par l'équipe, sur cet ordinateur ou le NAS.",
                      column(conv_row, remap))
-        self.auto_file = QCheckBox("Ranger tout seul les fichiers dont l'IA est sûre")
-        self.auto_file.setChecked(cfg.auto_file)
-        page.add_row("Rangement automatique",
-                     f"Confiance d'au moins {AUTO_MIN_CONFIDENCE:.0%}".replace("%", " %") + ". Les autres fichiers "
-                     "attendent votre avis : TriBin vous prévient.",
-                     column(self.auto_file, muted("Un fichier qui demanderait un nouveau dossier attend toujours votre "
-                                                  "accord. Tout rangement s'annule depuis l'Historique.")))
+        page.add_row("Rangement automatique", "TriBin range tout seul les fichiers dont l'IA est assez sûre. "
+                     "Les autres attendent votre avis : TriBin vous prévient.", self._auto_box(cfg))
         return page
+
+    def _auto_box(self, cfg) -> QWidget:
+        """Interrupteur, curseur du seuil de confiance et phrase qui explique ce que fait ce seuil."""
+        box = QWidget()
+        layout = QVBoxLayout(box)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
+        switch_row = QHBoxLayout()
+        switch_row.setSpacing(12)
+        self.auto_file = ToggleSwitch(cfg.auto_file)
+        self.auto_file.setAccessibleName("Rangement automatique")
+        self.auto_state = QLabel()
+        self.auto_state.setStyleSheet("font-weight: 600;")
+        switch_row.addWidget(self.auto_file)
+        switch_row.addWidget(self.auto_state, 1)
+        layout.addLayout(switch_row)
+        layout.addSpacing(4)
+        layout.addWidget(section("Seuil de confiance"))
+        self.threshold = ThresholdSlider(round((cfg.auto_min_confidence or AUTO_MIN_CONFIDENCE) * 100))
+        layout.addWidget(self.threshold)
+        scale = QHBoxLayout()
+        for text in ("60 % · plus de fichiers rangés seuls", "95 % · seulement les plus sûrs"):
+            label = muted(text, name="Faint", wrap=False)
+            scale.addWidget(label)
+            if text.startswith("60"):
+                scale.addStretch()
+        layout.addLayout(scale)
+        self.threshold_hint = muted()
+        layout.addWidget(self.threshold_hint)
+        personal = self.initial_mode == "personal"
+        layout.addWidget(muted(("En mode personnel, une catégorie ou un dossier d'année manquant est créé sans "
+                                "demander. " if personal else "Un fichier qui demanderait un nouveau dossier attend "
+                                "toujours votre accord. ") + "Tout rangement s'annule depuis l'Historique."))
+        self.auto_file.toggled.connect(lambda _: self._auto_changed())
+        self.threshold.changed.connect(lambda _: self._auto_changed())
+        self._auto_changed()
+        return box
+
+    def _auto_changed(self) -> None:
+        on = self.auto_file.isChecked()
+        value = self.threshold.value()
+        self.auto_state.setText("Activé" if on else "Désactivé")
+        self.threshold.setEnabled(on)
+        if not on:
+            self.threshold_hint.setText("Activez le rangement automatique pour régler le seuil.")
+        elif value >= 80:
+            self.threshold_hint.setText(f"Rangés seuls : les fichiers « sûrs » (confiance d'au moins {value} %).")
+        else:
+            self.threshold_hint.setText(f"Rangés seuls dès {value} % de confiance, y compris des fichiers « à "
+                                        "regarder » : quelques erreurs possibles, toutes annulables.")
 
     def _ai_page(self) -> SettingsPage:
         svc = self.c.service
@@ -386,6 +439,7 @@ class SettingsDialog(QDialog):
             cfg.convention_path = str(path)
             QMessageBox.information(self, "TriBin", note)
         cfg.auto_file = self.auto_file.isChecked()
+        cfg.auto_min_confidence = self.threshold.value() / 100
         cfg.hotkey = self.hotkey.isChecked()
         provider = self.provider()
         cfg.provider = provider

@@ -126,6 +126,15 @@ def main() -> None:
         save(widget, name)
     settings_dialog = SettingsDialog(controller)
     save(settings_dialog, "reglages.png", (960, 660))
+    settings_dialog.auto_file.setChecked(True)
+    settings_dialog.threshold.setValue(80)
+    folders_page = settings_dialog.pages.widget(0)
+    deadline = time.time() + 0.5
+    while time.time() < deadline:  # fin de l'animation de l'interrupteur
+        app.processEvents()
+    folders_page.verticalScrollBar().setValue(folders_page.verticalScrollBar().maximum())
+    save(settings_dialog, "reglages-auto.png")
+    folders_page.verticalScrollBar().setValue(0)
     settings_dialog.pages.setCurrentIndex(1)
     settings_dialog.nav.button(1).setChecked(True)
     save(settings_dialog, "reglages-ia.png")
