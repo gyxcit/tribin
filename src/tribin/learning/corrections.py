@@ -114,8 +114,10 @@ def changed_fields(proposal: Proposal, final_folder: str, final_name: str, conve
 def record_correction(db: Database, convention: Convention, original_name: str, excerpt: str, client_hint: str | None,
                       proposal: Proposal, final_folder: str, final_name: str, decision: str,
                       source: str = "explicit") -> list[str]:
-    """Enregistre une validation. Renvoie les règles d'équipe contredites (vide si conforme)."""
-    broken = contradicts_team(final_folder, final_name, convention) if decision in LEARNABLE else []
+    """Enregistre une validation. Renvoie les règles d'équipe contredites (vide si conforme ; toujours vide en mode
+    personnel : pas d'équipe, un dossier hors des catégories est un choix comme un autre)."""
+    check_team = decision in LEARNABLE and not convention.personal
+    broken = contradicts_team(final_folder, final_name, convention) if check_team else []
     with db.tx() as c:
         c.execute(
             "INSERT INTO corrections(ts, original_name, extension, excerpt, client_hint, ai_folder, ai_name, final_folder, "
@@ -150,12 +152,19 @@ def team_rule_alerts(db: Database) -> list[str]:
 # --- récupération des exemples ---------------------------------------------------------------
 
 
-def similar_examples(db: Database, info: FileInfo, client_hint: str | None, limit: int = MAX_EXAMPLES) -> list[str]:
+def usable(corr: Correction, personal: bool = False) -> bool:
+    """Correction dont on peut apprendre. Celles qui contredisent la convention d'équipe sont écartées, sauf en mode
+    personnel (y compris celles enregistrées avant que ce mode ne les accepte)."""
+    return corr.decision in LEARNABLE and (personal or not corr.contradicts_team)
+
+
+def similar_examples(db: Database, info: FileInfo, client_hint: str | None, limit: int = MAX_EXAMPLES,
+                     personal: bool = False) -> list[str]:
     """Jusqu'à 5 corrections récentes les plus similaires (même type, même client, nom proche)."""
     stem = split_extension(info.name)[0].lower()
     scored = []
     for corr in list_corrections(db, 300):
-        if corr.decision not in LEARNABLE or corr.contradicts_team:
+        if not usable(corr, personal):
             continue
         score = fuzz.token_set_ratio(stem, split_extension(corr.original_name)[0].lower()) * 0.4
         score += 30 if corr.extension == info.extension else 0

@@ -56,16 +56,40 @@ def base_info(path: Path) -> FileInfo:
     )
 
 
+# Fichiers lus comme du texte brut : notes, données, sous-titres, agendas, contacts, configuration, code source.
+# Jamais lus (le nom suffit) : .env, .pem, .p12, .kdbx… (secrets), et tout format absent des tables ci-dessous.
+TEXT_EXTENSIONS = (
+    ".txt", ".md", ".markdown", ".rst", ".csv", ".tsv", ".log", ".tex", ".bib", ".srt", ".vtt", ".ics", ".vcf",
+    ".url", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".sql", ".css", ".scss", ".less",
+    ".py", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".vue", ".svelte", ".java", ".kt", ".swift", ".c", ".h",
+    ".cpp", ".hpp", ".cs", ".go", ".rs", ".rb", ".php", ".pl", ".lua", ".r", ".dart", ".scala", ".sh", ".bash",
+    ".zsh", ".bat", ".cmd", ".ps1",
+)
+ARCHIVE_EXTENSIONS = (".zip", ".tar", ".tgz", ".tar.gz", ".tar.bz2", ".tar.xz")
+
+
 def _extractor_for(ext: str) -> Callable[[Path, FileInfo], None] | None:
-    from tribin.extract import creative, image, office, pdf, text
+    from tribin.extract import creative, documents, image, office, pdf, text, web
 
     table: dict[str, Callable[[Path, FileInfo], None]] = {
-        ".txt": text.extract_text, ".md": text.extract_text, ".csv": text.extract_text,
         ".pdf": pdf.extract_pdf,
-        ".docx": office.extract_docx, ".xlsx": office.extract_xlsx, ".xlsm": office.extract_xlsx,
-        ".pptx": office.extract_pptx,
+        ".docx": office.extract_docx, ".docm": office.extract_docx, ".xlsx": office.extract_xlsx,
+        ".xlsm": office.extract_xlsx, ".pptx": office.extract_pptx, ".pptm": office.extract_pptx,
+        ".doc": documents.extract_legacy_office, ".xls": documents.extract_legacy_office,
+        ".ppt": documents.extract_legacy_office,
+        ".odt": documents.extract_odf, ".ods": documents.extract_odf, ".odp": documents.extract_odf,
+        ".odg": documents.extract_odf, ".rtf": documents.extract_rtf, ".epub": documents.extract_epub,
+        ".eml": documents.extract_eml, ".pages": documents.extract_iwork, ".numbers": documents.extract_iwork,
+        ".key": documents.extract_iwork,
+        ".html": web.extract_html, ".htm": web.extract_html, ".xhtml": web.extract_html, ".shtml": web.extract_html,
+        ".mht": web.extract_mhtml, ".mhtml": web.extract_mhtml, ".xml": web.extract_xml, ".svg": web.extract_svg,
+        ".json": web.extract_json, ".ipynb": web.extract_notebook, ".webloc": web.extract_webloc,
         ".psd": creative.extract_psd, ".ai": creative.extract_ai,
     }
+    for text_ext in TEXT_EXTENSIONS:
+        table[text_ext] = text.extract_text
+    for archive_ext in ARCHIVE_EXTENSIONS:
+        table[archive_ext] = documents.extract_archive
     for img_ext in image.IMAGE_EXTENSIONS:
         table[img_ext] = image.extract_image
     return table.get(ext)

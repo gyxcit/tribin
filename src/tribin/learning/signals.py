@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from tribin.convention.loader import Convention
 from tribin.db import Database
 from tribin.fs.filters import INTERNAL_DIRS, ExclusionMatcher, nfc
-from tribin.learning.corrections import LEARNABLE, list_corrections, record_correction
+from tribin.learning.corrections import list_corrections, record_correction, usable
 from tribin.learning.rules_store import list_rules, replace_rules
 from tribin.llm.base import LLMError, LLMProvider
 from tribin.models import NameFields, Proposal
@@ -93,9 +93,10 @@ SUMMARY_SYSTEM = (
 )
 
 
-def maybe_summarize(db: Database, llm: LLMProvider | None, every: int = SUMMARY_EVERY, force: bool = False) -> bool:
+def maybe_summarize(db: Database, llm: LLMProvider | None, every: int = SUMMARY_EVERY, force: bool = False,
+                    personal: bool = False) -> bool:
     """Toutes les 5 corrections, régénère les règles lisibles. Renvoie True si les règles ont changé."""
-    learnable = [c for c in list_corrections(db, 1000) if c.decision in LEARNABLE and not c.contradicts_team]
+    learnable = [c for c in list_corrections(db, 1000) if usable(c, personal)]
     bucket = len(learnable) // every
     if llm is None or (not force and (bucket == 0 or bucket <= (db.get_setting("rules_bucket", 0) or 0))):
         return False

@@ -445,6 +445,7 @@ class HistoryView(QWidget):
         problems = [r for r in results if r["status"] == "failed"]
         if problems:
             QMessageBox.warning(self, "Annulation partielle", "\n".join(f"{r['from']} : {r['message']}" for r in problems))
+        self.c.requeue_returned()  # un rangement annulé revient dans « À ranger »
         self.c.refresh_queue()
         self.reload()
         self.c.bin_window.statusBar().showMessage(

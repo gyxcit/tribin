@@ -258,10 +258,14 @@ class RulesWidget(QWidget):
             self.reload()
 
     def analyze(self) -> None:
-        from tribin.learning.corrections import LEARNABLE, list_corrections
+        from tribin.learning.corrections import list_corrections, usable
         from tribin.learning.signals import maybe_summarize
 
-        if not [c for c in list_corrections(self.db) if c.decision in LEARNABLE]:
+        try:
+            personal = self.c.service.convention().personal
+        except Exception:
+            personal = False
+        if not [c for c in list_corrections(self.db) if usable(c, personal)]:
             QMessageBox.information(self, "TriBin", "Pas encore de corrections à analyser : elles viennent des "
                                     "fichiers dont vous avez changé le dossier ou le nom.")
             return
@@ -272,7 +276,7 @@ class RulesWidget(QWidget):
             return
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
-            changed = maybe_summarize(self.db, llm, force=True)
+            changed = maybe_summarize(self.db, llm, force=True, personal=personal)
         finally:
             QApplication.restoreOverrideCursor()
         self.reload()

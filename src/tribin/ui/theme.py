@@ -171,11 +171,13 @@ QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; }}
 """
 
 
-def level_for(confidence: float | None, manual: bool = False, waiting: bool = False) -> tuple[str, str, str, str]:
-    """Niveau de confiance : (clé, libellé, fond, texte). Seuils : 0,8 et 0,6 (marqueur « à vérifier »)."""
+def level_for(confidence: float | None, manual: bool = False, waiting: bool = False,
+              hesitant: bool = False) -> tuple[str, str, str, str]:
+    """Niveau de confiance : (clé, libellé, fond, texte). Seuils : 0,8 et 0,6 (marqueur « à vérifier ») ; une IA qui
+    hésite entre deux dossiers fait toujours vérifier."""
     if waiting:
         return LEVEL_WAIT
-    if manual or confidence is None or confidence < 0.6:
+    if manual or hesitant or confidence is None or confidence < 0.6:
         return LEVEL_CHECK
     return LEVEL_SURE if confidence >= 0.8 else LEVEL_LOOK
 

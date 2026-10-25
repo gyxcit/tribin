@@ -461,7 +461,7 @@ class SettingsDialog(QDialog):
         page.add_row("Profil", "Envoyé à l'IA avec chaque fichier.", self.profile)
         from tribin.ui.rules_view import RulesEditor
 
-        alerts = team_rule_alerts(svc.db)
+        alerts = team_rule_alerts(svc.db) if self.initial_mode == "work" else []  # pas d'équipe en mode personnel
         if alerts:
             warning = QLabel("\n".join(alerts) + "\nPensez à en parler au référent des conventions.")
             warning.setObjectName("Warning")

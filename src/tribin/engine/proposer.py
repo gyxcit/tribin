@@ -24,7 +24,6 @@ from tribin.models import Alternative, FileInfo, LLMProposal, NameFields, Propos
 log = logging.getLogger(__name__)
 
 MAX_CLIENTS_IN_PROMPT = 30
-ALTERNATIVE_CONFIDENCE_CAP = 0.55  # même valeur que dans le barème du prompt
 
 
 @dataclass
@@ -283,9 +282,8 @@ def finalize(info: FileInfo, resp: LLMProposal, ctx: ProposeContext) -> Proposal
         alt_fields.category = alt_fields.category if alt_fields.category in conv.category_codes() else fields.category
         alt_name = build_name(alt_fields, conv.naming, info.extension, info.modified)
         alternatives.append(Alternative(target_folder=alt_folder, new_name=alt_name, reasoning=alt.reasoning))
-    if alternatives and confidence > ALTERNATIVE_CONFIDENCE_CAP:
-        # Règle du prompt appliquée par le code : si l'IA envisage un autre dossier, elle hésite -> « à vérifier ».
-        confidence = ALTERNATIVE_CONFIDENCE_CAP
+    if alternatives:
+        # L'IA envisage un autre dossier : « à vérifier » (Proposal.hesitant), mais sa confiance reste la sienne.
         warnings.append(f"L'IA hésite avec : {alternatives[0].target_folder}")
     return Proposal(
         file_id=info.file_id, source_path=info.path, target_folder=folder, folder_is_new=folder_is_new,
@@ -307,8 +305,7 @@ def propose(info: FileInfo, ctx: ProposeContext) -> Proposal:
         log.exception("similar files lookup failed for %s", info.path)
         similar = []
     known = {c.rel.casefold() for c in candidates}
-    candidates = [*candidates, *(Candidate(s.folder, "contient des fichiers du même modèle de nom")
-                                 for s in similar if s.folder.casefold() not in known)]
+    candidates = [*candidates, *(Candidate(s.folder, s.reason) for s in similar if s.folder.casefold() not in known)]
     data = build_prompt_data(info, ctx, hint, candidates, examples, similar)
     try:
         resp = ctx.llm.complete_json(system_prompt(ctx.convention.personal, ctx.convention.structure.max_depth or 1),

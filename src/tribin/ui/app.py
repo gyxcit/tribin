@@ -304,8 +304,14 @@ class AppController:
     def set_drop_widget_visible(self, visible: bool) -> None:
         self.drop_widget.setVisible(visible)
 
+    def requeue_returned(self) -> None:
+        """Rangements annulés : les fichiers revenus dans le dossier tampon repassent « à ranger »."""
+        for file_id in self.service.requeue_returned():
+            self._analyze(file_id)
+
     def start(self, initial_paths: list[Path]) -> None:
         """Après l'onboarding : reprend les analyses interrompues puis traite les fichiers reçus au lancement."""
+        self.requeue_returned()  # y compris ceux annulés avant que TriBin ne sache les remettre dans la liste
         self.refresh_queue()
         self._run(self.service.check_implicit_corrections)
         self.service.retry_without_ai()  # analyses restées sans IA (clé ou module absent la dernière fois)

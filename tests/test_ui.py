@@ -174,6 +174,9 @@ def test_batch_shows_simulation_then_history_and_undo(qapp, controller, monkeypa
     placed = controller.sb / "root" / NOEL / "06_Admin" / "2026-10-12_ACME_2026-042_Devis-impression.pdf"
     assert not placed.exists()
     assert any(w.text() == "Annulé" for w in history.findChildren(QLabel))
+    back = controller.service.pending()  # revenus dans « À ranger », avec leur proposition (pas cachés)
+    assert len(back) == 2 and all(i.status == "ready" and i.proposal for i in back)
+    assert controller.service.requeue_returned() == [] and len(controller.service.pending()) == 2  # pas en double
 
 
 def test_simulation_dialog_blocks_on_problem(qapp, controller):

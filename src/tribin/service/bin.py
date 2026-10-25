@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import threading
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -284,6 +285,22 @@ class BinService:
     def set_aside_items(self) -> list[QueueItem]:
         return self.queue.skipped()
 
+    def requeue_returned(self) -> list[str]:
+        """Fichiers « rangés » revenus dans le dossier tampon (rangement annulé depuis l'Historique) : de nouveau
+        « à ranger », au lieu de rester cachés dans le dossier interne. Renvoie les fichiers à réanalyser."""
+        to_analyze = []
+        listed = {os.path.normcase(i.staged_path) for i in [*self.queue.active(), *self.queue.skipped()]}
+        for row in self.db.query("SELECT file_id, staged_path FROM queue WHERE status='done'"):
+            if os.path.normcase(row["staged_path"]) in listed or not Path(row["staged_path"]).is_file():
+                continue  # déjà dans la liste (déposé de nouveau), ou bien rangé : plus dans le dossier tampon
+            listed.add(os.path.normcase(row["staged_path"]))
+            item = self.queue.get(row["file_id"])
+            status = "ready" if item and item.proposal else "analyzing"
+            self.queue.set_status(row["file_id"], status)
+            if status == "analyzing":
+                to_analyze.append(row["file_id"])
+        return to_analyze
+
     def rebuild_pending_names(self) -> int:
         """Nommage modifié dans les réglages : les noms proposés des fichiers en attente sont recalculés
         (sans nouvel appel à l'IA). Renvoie le nombre de noms changés."""
@@ -386,6 +403,9 @@ class BinService:
                 if p.confidence < min_confidence:
                     report.left.append((item, "confiance trop faible"))
                     continue
+                if p.hesitant:
+                    report.left.append((item, "l'IA hésite entre deux dossiers"))
+                    continue
                 try:
                     prepared = self.prepare([Validation(item.file_id, p.target_folder, p.new_name, "auto")])
                 except BinError as exc:
@@ -434,7 +454,7 @@ class BinService:
             remember_placement(self.db, op.operation_id, op.destination, Path(item.root), v.target_folder,
                                op.destination.name, original, item.proposal.client_hint)
             if v.decision not in ("accepted", "auto"):
-                maybe_summarize(self.db, self.context(Path(item.root)).llm)
+                maybe_summarize(self.db, self.context(Path(item.root)).llm, personal=convention.personal)
         except Exception:
             log.exception("learning hook failed")
 

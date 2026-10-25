@@ -68,7 +68,7 @@ def item_level(item: QueueItem) -> tuple[str, str, str, str]:
     """Niveau de confiance d'un fichier en attente (analyse en cours, erreur, manuel compris)."""
     p = item.proposal
     return level_for(p.confidence if p else None, manual=bool(p and p.manual) or item.status == "error",
-                     waiting=item.status == "analyzing")
+                     waiting=item.status == "analyzing", hesitant=bool(p and p.hesitant))
 
 
 def status_label(item: QueueItem) -> str:

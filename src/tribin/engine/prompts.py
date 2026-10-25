@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-PROMPT_VERSION = "p5"
-PERSONAL_PROMPT_VERSION = "p6-perso"
+PROMPT_VERSION = "p6"
+PERSONAL_PROMPT_VERSION = "p7-perso"
 
 SYSTEM_PROMPT = """Tu es l'assistant de rangement de fichiers d'une équipe. Ta mission : proposer
 le dossier où ranger un fichier et les éléments de son nouveau nom, en respectant
@@ -43,15 +43,21 @@ Règles :
   0.4 à 0.55 : deux catégories ou deux projets sont plausibles, ou le fichier n'a
             pas de texte et tu te fondes sur le nom, la date ou l'image ;
   moins de 0.4 : tu devines.
-  Si une autre destination est plausible, indique-la dans alternatives et mets
-  confidence à 0.55 au plus.
+  Si une autre destination est plausible, indique-la dans alternatives : un humain
+  tranchera. Donne quand même ta vraie confiance pour la proposition principale.
 - Réponds UNIQUEMENT avec un objet JSON valide, sans aucun texte autour."""
 
 PERSONAL_RULES = """
 
 Mode personnel (papiers et fichiers d'une personne, pas d'une agence) :
 - Il n'y a ni client ni projet : client, project_code et project_name = null.
-- Choisis la catégorie la plus adaptée dans la liste (le nom du dossier existant
+- Les dossiers existants comptent autant que les catégories, même s'ils ne sont pas
+  dans la liste (« startup », « Voyage-Japon » : créés par l'utilisateur). Si un dossier
+  contient déjà des fichiers du même sujet, du même projet ou portant le même mot
+  distinctif (voir « Fichiers déjà rangés qui ressemblent à celui-ci », le contenu du
+  fichier et les corrections passées), range le fichier dans ce dossier plutôt que
+  dans une catégorie générale : c'est là que l'utilisateur le cherchera.
+- Sinon, choisis la catégorie la plus adaptée dans la liste (le nom du dossier existant
   compte : « salaire » pour un bulletin de paie s'il existe).
 - Si AUCUNE catégorie ne convient vraiment, crée-en une : category = nom court
   en français, 1 ou 2 mots, sans accent (ex. « Animaux », « Voyages »). N'en
@@ -156,7 +162,8 @@ def build_user_prompt(d: PromptData) -> str:
         _section("Règles apprises de cet utilisateur", _bullets(d.learned_rules)),
         _section("Dossiers candidats (chemin relatif — description)", _bullets(d.candidate_folders)),
         _section("Projets existants", ", ".join(d.project_folders)),
-        _section("Fichiers du même modèle de nom déjà rangés", _bullets(d.similar_files)),
+        _section("Fichiers déjà rangés qui ressemblent à celui-ci (même modèle de nom ou même mot distinctif)",
+                 _bullets(d.similar_files)),
         _section("Exemples de corrections passées (fichier d'origine → choix final)", _bullets(d.correction_examples)),
         _section("Indice", f"Client détecté automatiquement (peut être faux) : {d.client_hint}" if d.client_hint else ""),
         _section("Fichier à ranger", file_block),

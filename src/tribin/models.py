@@ -69,9 +69,14 @@ class Proposal(BaseModel):
     duration_s: float = 0.0
 
     @property
+    def hesitant(self) -> bool:
+        """L'IA envisage une autre destination : un humain tranche, quelle que soit sa confiance."""
+        return bool(self.alternatives)
+
+    @property
     def needs_review(self) -> bool:
-        """« À vérifier » si la confiance est faible ou si la proposition est manuelle."""
-        return self.manual or self.confidence < LOW_CONFIDENCE
+        """« À vérifier » si la confiance est faible, si l'IA hésite ou si la proposition est manuelle."""
+        return self.manual or self.hesitant or self.confidence < LOW_CONFIDENCE
 
 
 # --- Réponse attendue de l'IA (section 8) ---------------------------------------------------

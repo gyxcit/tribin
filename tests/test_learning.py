@@ -92,6 +92,34 @@ def test_correction_against_team_convention_is_not_learned(settings, sb):
     assert any("structure" in a for a in alerts) and any("nommage" in a for a in alerts)
 
 
+def test_personal_mode_learns_from_folders_outside_the_categories(settings, sb):
+    """Mode particulier : pas d'équipe. « startup », dossier créé par l'utilisateur, est un choix comme un autre."""
+    from tribin.service.conventions import create_convention
+
+    llm = smart_llm()
+    svc = make_service(settings, sb, llm)
+    cfg = svc.config
+    cfg.convention_path = str(create_convention("personal", cfg.roots, settings.data_dir)[0])
+    svc.update_config(cfg)
+    (sb / "root" / "startup").mkdir()
+    for i in (1, 2):
+        place(svc, sb, f"devis_imprimeur_{i}.txt", folder="startup")
+    assert not any(c.contradicts_team for c in list_corrections(svc.db))
+    svc.analyze(svc.drop(sb / "inbox" / "devis_imprimeur_3.txt").file_id)
+    assert "→ startup/" in llm.prompts[-1].split("## Exemples de corrections passées")[1]
+    assert team_rule_alerts(svc.db) == []
+
+    # corrections enregistrées avant cette version (marquées « contraires à l'équipe ») : utilisées quand même
+    with svc.db.tx() as c:
+        c.execute("UPDATE corrections SET contradicts_team=1")
+    info = svc.queue.active()[-1]
+    from tribin.extract import extract
+
+    staged = extract(Path(info.staged_path))
+    assert similar_examples(svc.db, staged, None) == []
+    assert similar_examples(svc.db, staged, None, personal=True)
+
+
 def test_name_conformity():
     conv = load_convention(REPO / "convention.example.yaml")
     assert name_conforms("2026-10-12_ACME_2026-042_Devis-Impression_v02.pdf", conv)

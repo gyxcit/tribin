@@ -107,7 +107,7 @@ def test_normalize_rel():
     assert normalize_rel("C:\\A") is None
 
 
-def test_duplicate_alternatives_dropped_and_real_one_caps_confidence(sb):
+def test_duplicate_alternatives_dropped_and_real_one_needs_review(sb):
     from tribin.models import LLMAlternative
 
     same = LLMAlternative(target_folder=f"{NOEL}/06_Admin", description="Devis", reasoning="identique")
@@ -116,7 +116,7 @@ def test_duplicate_alternatives_dropped_and_real_one_caps_confidence(sb):
     assert p.alternatives == [] and p.confidence == 0.95 and not p.needs_review
     p, _ = run(sb, fixed(target_folder=f"{NOEL}/06_Admin", description="Devis", confidence=0.95, alternatives=[same, other]))
     assert [a.target_folder for a in p.alternatives] == [f"{NOEL}/01_Brief"]
-    assert p.confidence == 0.55 and p.needs_review
+    assert p.confidence == 0.95 and p.hesitant and p.needs_review  # sa vraie confiance, mais à vérifier
     assert any("hésite" in w for w in p.warnings)
 
 
@@ -159,8 +159,22 @@ def test_files_with_same_name_pattern_point_to_their_folder(sb):
     ctx = ProposeContext(root=sb / "root", convention=load_convention(sb / "convention.yaml"), llm=llm)
     ctx.similar_provider = lambda info: placed.similar(info.name)
     p = propose(extract(sb / "inbox" / "2026_09_lefort_marie_2026_09_29T09_41_07.pdf"), ctx)
-    assert "Fichiers du même modèle de nom déjà rangés" in llm.prompts[0]
+    assert "Fichiers déjà rangés qui ressemblent à celui-ci" in llm.prompts[0]
     candidates = llm.prompts[0].split("## Dossiers candidats")[1].split("##")[0]
     assert "- Administratif/Bulletins-de-paie" in candidates  # toujours proposé parmi les candidats
     assert p.target_folder == "Administratif/Bulletins-de-paie" and not p.folder_is_new and p.confidence == 0.9
     assert "_v" not in p.new_name  # l'heure du nom d'origine n'est pas une version
+
+
+def test_files_sharing_a_distinctive_word_point_to_their_folder(tmp_path):
+    """« Stagio Traitement.html » : « startup » contient déjà « Presentation-projet-Stagio… » (même projet)."""
+    from tribin.engine.similar import PlacedFiles
+
+    for rel in ("startup/Presentation-projet-Stagio_2026-10-20.pdf", "Etudes/CV/2026-10-19_CV-projet-IA.pdf",
+                "Factures/Facture-projet-loyer.pdf", "Banque/Releve-projet-epargne.pdf"):
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_text("x")
+    found = PlacedFiles(tmp_path).similar("Stagio Traitement.html")
+    assert [(s.folder, s.word) for s in found] == [("startup", "stagio")]
+    assert "dont le nom contient « stagio »" in found[0].render()
+    assert PlacedFiles(tmp_path).similar("Projet final.docx") == []  # « projet » : dans trop de dossiers
