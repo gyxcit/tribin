@@ -475,7 +475,9 @@ def test_personal_mode_in_onboarding_and_settings(qapp, controller, monkeypatch)
     dialog = SettingsDialog(controller)
     controller.extra.append(dialog)
     assert dialog.mode() == "personal"
+    assert dialog.convention_row.isHidden()  # Particulier : TriBin gère seul sa convention
     dialog.mode_cards["work"].radio.setChecked(True)
+    assert not dialog.convention_row.isHidden()  # Professionnel : « Convention de l'équipe »
     assert dialog.roots.values() == []  # le mode Travail a ses propres dossiers (aucun pour l'instant)
     dialog._save()  # refusé : aucun dossier pour le mode Travail
     assert controller.service.convention().personal

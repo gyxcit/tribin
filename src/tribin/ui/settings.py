@@ -111,8 +111,13 @@ class SettingsPage(QScrollArea):
         self.body.addSpacing(20)
         self.setWidget(content)
 
-    def add_row(self, title: str, help_text: str, control: QWidget) -> None:
-        self.body.addWidget(divider())
+    def add_row(self, title: str, help_text: str, control: QWidget) -> QWidget:
+        """Ajoute la ligne et la renvoie (pour la masquer selon le mode, par exemple)."""
+        container = QWidget()
+        outer = QVBoxLayout(container)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        outer.addWidget(divider())
         row = QHBoxLayout()
         row.setContentsMargins(0, 18, 0, 18)
         row.setSpacing(24)
@@ -129,7 +134,9 @@ class SettingsPage(QScrollArea):
         holder.setLayout(left)
         row.addWidget(holder, 0, Qt.AlignmentFlag.AlignTop)
         row.addWidget(control, 1, Qt.AlignmentFlag.AlignTop)
-        self.body.addLayout(row)
+        outer.addLayout(row)
+        self.body.addWidget(container)
+        return container
 
     def add_wide(self, title: str, help_text: str, control: QWidget) -> None:
         """Réglage sur toute la largeur (titre et aide au-dessus) : listes et grands champs."""
@@ -246,13 +253,17 @@ class SettingsDialog(QDialog):
         for card in self.mode_cards.values():
             card.radio.toggled.connect(lambda checked: checked and self._mode_switched())
         self.roots = roots_picker(cfg.roots)
-        page.add_row("Dossiers à ranger", "", self.roots)
+        remap = QPushButton("Réanalyser les dossiers")
+        remap.setToolTip("Relit la structure des dossiers à ranger (après une réorganisation, par exemple).")
+        remap.clicked.connect(self.c.remap)
+        page.add_row("Dossiers à ranger", "", column(self.roots, remap))
         self.excluded = excluded_picker(cfg.local_excluded, self.roots.values)
         page.add_row("Dossiers à ne jamais toucher", "", self.excluded)
         return page
 
     def _filing_page(self) -> SettingsPage:
-        """Comment ranger : convention, profondeur des dossiers (mode personnel) et rangement automatique."""
+        """Comment ranger : convention de l'équipe (mode professionnel), nom des fichiers, profondeur des dossiers
+        (mode personnel) et rangement automatique."""
         cfg = self.c.service.config
         page = SettingsPage("Rangement")
         conv_row = QHBoxLayout()
@@ -261,10 +272,9 @@ class SettingsDialog(QDialog):
         browse.clicked.connect(self._browse_convention)
         conv_row.addWidget(self.convention, 1)
         conv_row.addWidget(browse)
-        remap = QPushButton("Réanalyser les dossiers")
-        remap.setToolTip("Relit la structure des dossiers à ranger (après une réorganisation, par exemple).")
-        remap.clicked.connect(self.c.remap)
-        page.add_row("Convention de rangement", "", column(conv_row, remap))
+        # Fichier partagé par l'équipe ; en mode particulier, TriBin gère seul sa convention : rien à montrer.
+        self.convention_row = page.add_row("Convention de l'équipe", "", column(conv_row))
+        self.convention_row.setVisible(self.initial_mode == "work")
         page.add_row("Nom des fichiers", "", self._naming_box())
         self.depth_buttons = QButtonGroup(self)
         self.initial_depth = self._current_depth()
@@ -533,6 +543,7 @@ class SettingsDialog(QDialog):
         self.roots.set_values(values["roots"])
         self.excluded.set_values(values["local_excluded"])
         self.convention.setText(values["convention_path"])
+        self.convention_row.setVisible(new == "work")
         self.shown_mode = new
 
     def mode(self) -> str:
@@ -601,8 +612,10 @@ class SettingsDialog(QDialog):
         cfg.roots = roots
         cfg.local_excluded = self.excluded.values()
         cfg.convention_path = self.convention.text().strip()
-        if mode != self.initial_mode and not (cfg.convention_path and Path(cfg.convention_path).is_file()):
-            path, note = create_convention(mode, cfg.roots, svc.settings.data_dir)  # première utilisation du mode
+        missing = not (cfg.convention_path and Path(cfg.convention_path).is_file())
+        if missing and (mode != self.initial_mode or mode == "personal"):
+            # première utilisation du mode, ou convention personnelle disparue (aucun champ pour la corriger)
+            path, note = create_convention(mode, cfg.roots, svc.settings.data_dir)
             cfg.convention_path = str(path)
             QMessageBox.information(self, "TriBin", note)
         cfg.remember_mode(mode)
