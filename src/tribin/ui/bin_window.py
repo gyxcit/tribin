@@ -303,6 +303,12 @@ class BinWindow(QMainWindow):
         except Exception:
             return []
 
+    def _personal(self) -> bool:
+        try:
+            return self.c.service.convention().personal
+        except Exception:
+            return False
+
     def _values(self, item: QueueItem) -> tuple[str, str]:
         edit = self._edits.get(item.file_id, {})
         p = item.proposal
@@ -310,7 +316,8 @@ class BinWindow(QMainWindow):
 
     def _selection_changed(self, file_id: str) -> None:
         item = self.current_item() if file_id else None
-        self.detail.show_item(item, *(self._values(item) if item else ("", "")), categories=self._categories())
+        self.detail.show_item(item, *(self._values(item) if item else ("", "")), categories=self._categories(),
+                              personal=self._personal())
 
     def _detail_edited(self) -> None:
         item = self.current_item()
@@ -326,7 +333,8 @@ class BinWindow(QMainWindow):
         alt = item.proposal.alternatives[index]
         self._edits[item.file_id] = {"name": alt.new_name, "folder": alt.target_folder, "alt": index}
         self._save_edits()
-        self.detail.show_item(item, alt.new_name, alt.target_folder, categories=self._categories())
+        self.detail.show_item(item, alt.new_name, alt.target_folder, categories=self._categories(),
+                              personal=self._personal())
 
     # --- actions ------------------------------------------------------------------------------
 

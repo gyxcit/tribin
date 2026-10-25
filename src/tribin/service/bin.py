@@ -362,7 +362,7 @@ class BinService:
             convention = self.convention()
             if convention.personal and ((p.new_category and v.target_folder.split("/")[0] == p.new_category)
                                         or matches_template(v.target_folder, convention)
-                                        or personal_folder_ok(v.target_folder, convention)):
+                                        or personal_folder_ok(v.target_folder, convention, Path(item.root))):
                 parts = v.target_folder.split("/")
                 trusted |= {Path(item.root).joinpath(*parts[:i]) for i in range(1, len(parts) + 1)}
         return Prepared(batch, executor.simulate(batch.ops), validations, frozenset(trusted))

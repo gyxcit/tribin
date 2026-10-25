@@ -241,6 +241,28 @@ def test_personal_mode_creates_missing_category(settings, sb):
     assert "Mode : personnel" in llm.prompts[0] and "Clients" not in llm.prompts[0]
 
 
+def test_personal_mode_accepts_existing_folder_outside_categories(settings, sb):
+    """Cas « Stagio » : l'IA choisit « startup », dossier créé par l'utilisateur, hors de la liste des catégories."""
+    from tribin.convention.loader import load_convention
+
+    llm = fixed(category=None, target_folder="Startup", date="2026-10-12", description="Admin Stagio", confidence=0.85)
+    svc, path = personal_service(settings, sb, llm)
+    (sb / "root" / "startup").mkdir()  # créé après la convention : pas dans la liste des catégories
+    (sb / "root" / "startup" / "Presentation-projet-Stagio_2026-10-20.pdf").write_bytes(b"%PDF-1.4")
+    item = svc.analyze(svc.drop(sb / "inbox" / "scan0042.pdf").file_id)
+    p = item.proposal
+    assert not p.manual and p.target_folder == "startup" and not p.folder_is_new  # nom exact du dossier existant
+    assert p.new_category is None and "startup" not in [c.lower() for c in load_convention(path).category_codes()]
+    assert p.confidence == 0.85 and not any("gabarit" in w for w in p.warnings)
+
+    llm = fixed(category="Startup", target_folder="startup/Admin", description="Admin Stagio", confidence=0.85)
+    svc._provider_factory = lambda s, m=None: llm  # catégorie « Startup » inventée : le dossier existant prime
+    svc.update_config(svc.config)
+    p = svc.analyze(svc.drop(sb / "inbox" / "BC_4512.pdf").file_id).proposal
+    assert p.target_folder == "startup/Admin" and p.new_category is None
+    assert not any("gabarit" in w for w in p.warnings)
+
+
 def test_personal_mode_uses_existing_category_and_work_mode_never_invents(settings, sb):
     llm = fixed(category="Santé", target_folder="Sante/2026", date="2026-10-12", description="Ordonnance",
                 confidence=0.9)

@@ -82,6 +82,7 @@ class DetailPanel(QFrame):
         self.item: QueueItem | None = None
         self._folder = ""
         self._categories: list[str] = []
+        self._personal = False  # mode personnel : la catégorie est le PREMIER niveau du dossier, pas le dernier
         self._filling = False
 
         # --- en-tête : le fichier ---
@@ -181,6 +182,7 @@ class DetailPanel(QFrame):
         self.category = QComboBox()
         self.category.setMinimumWidth(200)
         self.category.setAccessibleName("Catégorie")
+        self.category.setPlaceholderText("Choisir une catégorie")
         self.category.activated.connect(self._category_chosen)
         cat_row = QHBoxLayout()
         cat_row.addWidget(self.category)
@@ -263,10 +265,11 @@ class DetailPanel(QFrame):
         self._folder = folder.strip().strip("/")
         parts = [p for p in self._folder.split("/") if p]
         self.breadcrumb.set_parts(parts)
-        current = parts[-1] if parts else ""
+        current = (parts[0] if self._personal else parts[-1]) if parts else ""
         index = self.category.findData(current)
         self.category.setCurrentIndex(index)
-        self.category.setEnabled(index >= 0 and self.name.isEnabled())
+        # mode personnel : une catégorie se choisit toujours (aucun dossier, ou dossier hors catégories)
+        self.category.setEnabled(self.name.isEnabled() and (index >= 0 or self._personal))
         self.validate_button.setEnabled(self.name.isEnabled() and bool(parts))  # pas de dossier : rien à ranger
         self._changed()
 
@@ -281,7 +284,12 @@ class DetailPanel(QFrame):
     def _category_chosen(self, index: int) -> None:
         code = self.category.itemData(index)
         parts = [p for p in self._folder.split("/") if p]
-        if code and parts and parts[-1] in self._categories:
+        if not code:
+            return
+        if self._personal:
+            if not parts or parts[0] != code:
+                self.set_folder(code)  # autre catégorie : ses propres sous-dossiers, à choisir avec « Changer… »
+        elif parts and parts[-1] in self._categories:
             parts[-1] = code
             self.set_folder("/".join(parts))
 
@@ -307,7 +315,7 @@ class DetailPanel(QFrame):
     # --- affichage ----------------------------------------------------------------------------
 
     def show_item(self, item: QueueItem | None, name: str = "", folder: str = "",
-                  categories: list[str] | None = None) -> None:
+                  categories: list[str] | None = None, personal: bool = False) -> None:
         """Affiche un fichier ; `name` et `folder` : valeurs en cours (éventuellement modifiées)."""
         self.item = item
         self.setVisible(item is not None)
@@ -316,6 +324,7 @@ class DetailPanel(QFrame):
         self._filling = True
         try:
             self._build_categories(categories or [])
+            self._personal = personal
             p = item.proposal
             ready = item.status == "ready" and p is not None
             key = item_level(item)[0]

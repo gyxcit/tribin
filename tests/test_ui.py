@@ -135,6 +135,28 @@ def test_category_in_one_click(qapp, controller):
     assert validation.target_folder == f"{NOEL}/01_Brief" and validation.decision == "edited"
 
 
+def test_category_menu_in_personal_mode(qapp, controller):
+    """Mode personnel : la catégorie est le premier niveau ; sans dossier, elle se choisit quand même."""
+    from tribin.service.conventions import create_convention
+
+    svc = controller.service
+    cfg = svc.config
+    cfg.convention_path = str(create_convention("personal", cfg.roots, svc.settings.data_dir)[0])
+    svc.update_config(cfg)
+    detail = controller.bin_window.detail
+    controller.drop_paths([controller.sb / "inbox" / "scan0042.pdf"])
+    assert wait(qapp, lambda: ready_items(controller, 1))
+    controller.refresh_queue()
+    item = controller.bin_window.current_item()
+    win = controller.bin_window
+    detail.show_item(item, item.proposal.new_name, "Etudes/CV", categories=win._categories(), personal=True)
+    assert detail.category.currentData() == "Etudes" and detail.category.isEnabled()  # premier niveau
+    detail.show_item(item, item.proposal.new_name, "", categories=win._categories(), personal=True)
+    assert detail.category.currentIndex() == -1 and detail.category.isEnabled()  # aucun dossier : à choisir
+    detail.category.activated.emit(detail.category.findData("Banque"))
+    assert detail.folder == "Banque"
+
+
 def test_queue_restored_after_restart(qapp, controller, settings):
     controller.drop_paths([controller.sb / "inbox" / "notes.txt"])
     assert wait(qapp, lambda: ready_items(controller, 1))
