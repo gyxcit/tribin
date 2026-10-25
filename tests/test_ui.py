@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import shutil
 import time
 from pathlib import Path
@@ -506,3 +507,28 @@ def test_history_reveal_button(qapp, controller, monkeypatch):
         button.click()
     assert placed not in shown and any(p.name == "2026-10-12_ACME_2026-042_Devis-impression.pdf" or
                                        p.name == "scan0042.pdf" for p in shown)  # là où il est revenu
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="menu du clic droit de l'Explorateur : Windows")
+def test_context_menu_install_and_remove():
+    import winreg
+
+    from tribin.ui import system_integration as si
+
+    key = r"Software\TriBinTests\shell\TriBin"  # clé de test : sans effet sur le vrai clic droit
+    try:
+        assert si.install_context_menu(key) == "clic droit › Trier avec TriBin"
+        assert si.context_menu_installed(key)
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key) as k:
+            assert winreg.QueryValueEx(k, "")[0] == "Trier avec TriBin"
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key + r"\command") as k:
+            command = winreg.QueryValueEx(k, "")[0]
+        assert command.endswith('"%1"') and "tribin" in command.lower()
+    finally:
+        si.uninstall_context_menu(key)
+        for leftover in (r"Software\TriBinTests\shell", r"Software\TriBinTests"):
+            try:
+                winreg.DeleteKey(winreg.HKEY_CURRENT_USER, leftover)
+            except OSError:
+                pass
+    assert not si.context_menu_installed(key)

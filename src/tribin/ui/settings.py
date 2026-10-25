@@ -274,6 +274,12 @@ class SettingsDialog(QDialog):
     def _system_page(self) -> SettingsPage:
         journal_dir = self.c.service.settings.journal_dir
         page = SettingsPage("Système", "Raccourcis pour déposer des fichiers, et journal des opérations.")
+        self.context_menu = QPushButton()
+        self.context_menu.clicked.connect(self._toggle_context_menu)
+        self.context_menu.setEnabled(sys.platform == "win32")
+        self._refresh_context_menu()
+        page.add_row("Clic droit", "« Trier avec TriBin » sur n'importe quel fichier. Sous Windows 11, Maj + clic droit "
+                     "l'affiche directement (sinon : « Afficher d'autres options »).", column(self.context_menu))
         sendto = QPushButton("Ajouter « Envoyer vers › TriBin » au clic droit")
         sendto.clicked.connect(lambda: self._integrate(system_integration.install_sendto))
         desktop = QPushButton("Créer un raccourci TriBin sur le bureau")
@@ -332,6 +338,27 @@ class SettingsDialog(QDialog):
         for item in self.rules.selectedItems():
             delete_rule(self.c.service.db, item.data(Qt.ItemDataRole.UserRole))
         self._load_rules()
+
+    def _refresh_context_menu(self) -> None:
+        installed = system_integration.context_menu_installed()
+        self.context_menu.setText("Retirer « Trier avec TriBin » du clic droit" if installed
+                                  else "Ajouter « Trier avec TriBin » au clic droit")
+        self.context_menu.setObjectName("" if installed else "Primary")
+        self.context_menu.style().unpolish(self.context_menu)
+        self.context_menu.style().polish(self.context_menu)
+
+    def _toggle_context_menu(self) -> None:
+        try:
+            if system_integration.context_menu_installed():
+                system_integration.uninstall_context_menu()
+                QMessageBox.information(self, "TriBin", "« Trier avec TriBin » a été retiré du clic droit.")
+            else:
+                system_integration.install_context_menu()
+                QMessageBox.information(self, "TriBin", "C'est prêt : faites Maj + clic droit sur un fichier, puis "
+                                        "« Trier avec TriBin ».")
+        except OSError as exc:
+            QMessageBox.warning(self, "TriBin", f"Impossible de modifier le clic droit : {exc}")
+        self._refresh_context_menu()
 
     def _integrate(self, fn) -> None:
         try:
