@@ -655,7 +655,16 @@ def test_date_prefix_switch_renames_pending_files(qapp, controller, monkeypatch)
     controller.drop_paths([controller.sb / "inbox" / "scan0042.pdf"])
     assert wait(qapp, lambda: ready_items(controller, 1))
     assert controller.service.pending()[0].proposal.new_name == "2026-10-12_ACME_2026-042_Devis-impression.pdf"
-    monkeypatch.setattr(SettingsDialog, "exec", lambda self: (self.date_prefix.click(), self._save(), True)[-1])
-    controller.show_settings()  # interrupteur « Commencer le nom par la date » coupé, puis Enregistrer
-    assert "{date}" not in controller.service.convention().naming.template
-    assert controller.service.pending()[0].proposal.new_name == "ACME_2026-042_Devis-impression.pdf"
+    dialog = SettingsDialog(controller)
+    controller.extra.append(dialog)
+    assert dialog.date_start.isChecked() and not dialog.date_end.isChecked()
+    dialog.date_end.click()  # « Terminer par la date » coupe « Commencer par la date »
+    assert dialog.date_end.isChecked() and not dialog.date_start.isChecked()
+    assert dialog.name_example.text().endswith("CV-ingenieur-IA_2026-10-19.pdf")
+    dialog.date_end.click()  # les deux coupés : pas de date
+    assert dialog.date_position() == "none" and dialog.name_example.text().endswith("CV-ingenieur-IA.pdf")
+
+    monkeypatch.setattr(SettingsDialog, "exec", lambda self: (self.date_end.click(), self._save(), True)[-1])
+    controller.show_settings()  # « Terminer par la date », puis Enregistrer
+    assert controller.service.convention().naming.template.endswith("{date}")
+    assert controller.service.pending()[0].proposal.new_name == "ACME_2026-042_Devis-impression_2026-10-12.pdf"

@@ -303,11 +303,17 @@ def test_old_personal_conventions_switch_to_depth():
     assert work.structure.max_depth == 0  # mode travail : inchangé
 
 
-def test_date_prefix_template_on_and_off():
-    from tribin.service.conventions import date_prefix_template
+def test_date_position_template():
+    from tribin.convention.loader import Convention
+    from tribin.service.conventions import date_position, date_position_template
 
-    assert date_prefix_template("{date}_{description}", "_", False) == "{description}"
-    assert date_prefix_template("{description}", "_", True) == "{date}_{description}"
+    assert date_position_template("{date}_{description}", "_", "none") == "{description}"
+    assert date_position_template("{description}", "_", "start") == "{date}_{description}"
+    assert date_position_template("{date}_{description}", "_", "end") == "{description}_{date}"
+    assert date_position_template("{description}_{date}", "_", "start") == "{date}_{description}"
     work = "{date}_{client}_{project_code}_{description}_v{version}"
-    assert date_prefix_template(work, "_", False) == "{client}_{project_code}_{description}_v{version}"
-    assert date_prefix_template(work, "_", True) == work
+    assert date_position_template(work, "_", "none") == "{client}_{project_code}_{description}_v{version}"
+    assert date_position_template(work, "_", "start") == work
+    for template, position in (("{date}_{description}", "start"), ("{description}_{date}", "end"),
+                               ("{description}", "none")):
+        assert date_position(Convention.model_validate({"naming": {"template": template}})) == position

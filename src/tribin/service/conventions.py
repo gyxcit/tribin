@@ -94,23 +94,33 @@ def set_personal_depth(path: Path, depth: int) -> None:
     save_convention(convention, path)
 
 
-def date_prefix_template(template: str, separator: str, enabled: bool) -> str:
-    """Gabarit de nommage avec ou sans la date en tête (« {date}_{description} » <-> « {description} »)."""
-    if enabled:
-        return template if "{date}" in template else "{date}" + separator + template
+DATE_POSITIONS = ("start", "end", "none")
+
+
+def date_position_template(template: str, separator: str, position: str) -> str:
+    """Gabarit de nommage avec la date au début, à la fin ou absente
+    (« {date}_{description} », « {description}_{date} », « {description} »)."""
     for token in ("{date}" + separator, separator + "{date}", "{date}"):
         template = template.replace(token, "")
+    if position == "start":
+        return "{date}" + separator + template
+    if position == "end":
+        return template + separator + "{date}"
     return template
 
 
-def has_date_prefix(convention: Convention) -> bool:
-    return "{date}" in convention.naming.template
+def date_position(convention: Convention) -> str:
+    template = convention.naming.template
+    if "{date}" not in template:
+        return "none"
+    return "start" if template.startswith("{date}") else "end"
 
 
-def set_date_prefix(path: Path, enabled: bool) -> None:
-    """Réglages › Rangement : noms de fichiers avec ou sans la date au début."""
+def set_date_position(path: Path, position: str) -> None:
+    """Réglages › Rangement : la date au début du nom, à la fin, ou pas de date."""
     convention = load_convention(path)
-    convention.naming.template = date_prefix_template(convention.naming.template, convention.naming.separator, enabled)
+    convention.naming.template = date_position_template(convention.naming.template, convention.naming.separator,
+                                                        position)
     save_convention(convention, path)
 
 

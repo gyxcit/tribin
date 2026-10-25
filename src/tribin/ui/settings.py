@@ -40,8 +40,8 @@ from tribin.convention.loader import PERSONAL_DEPTH
 from tribin.service.conventions import (
     create_convention,
     current_mode,
-    has_date_prefix,
-    set_date_prefix,
+    date_position,
+    set_date_position,
     set_personal_depth,
 )
 from tribin.service.profile import PRIVACY_NOTICE, save_profile
@@ -244,34 +244,48 @@ class SettingsDialog(QDialog):
         return page
 
     def _naming_box(self) -> QWidget:
-        """Interrupteur « commencer par la date » et exemple de nom mis à jour en direct."""
+        """Interrupteurs « Commencer par la date » / « Terminer par la date » (l'un coupe l'autre ; les deux coupés :
+        pas de date) et exemple de nom mis à jour en direct."""
         try:
-            self.initial_date_prefix = has_date_prefix(self.c.service.convention())
+            self.initial_date_position = date_position(self.c.service.convention())
         except Exception:
-            self.initial_date_prefix = True
+            self.initial_date_position = "start"
         box = QWidget()
         layout = QVBoxLayout(box)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
-        row = QHBoxLayout()
-        row.setSpacing(12)
-        self.date_prefix = ToggleSwitch(self.initial_date_prefix)
-        self.date_prefix.setAccessibleName("Commencer le nom par la date")
-        row.addWidget(self.date_prefix)
-        row.addWidget(QLabel("Commencer le nom par la date du document"), 1)
-        layout.addLayout(row)
+        self.date_start = ToggleSwitch(self.initial_date_position == "start")
+        self.date_end = ToggleSwitch(self.initial_date_position == "end")
+        for switch, text in ((self.date_start, "Commencer par la date"), (self.date_end, "Terminer par la date")):
+            switch.setAccessibleName(text)
+            row = QHBoxLayout()
+            row.setSpacing(12)
+            row.addWidget(switch)
+            row.addWidget(QLabel(text), 1)
+            layout.addLayout(row)
         self.name_example = QLabel()
         self.name_example.setFont(mono_font())
         layout.addWidget(self.name_example)
         if self.initial_mode == "work":
             layout.addWidget(muted("Modifie la convention de l'équipe : à décider ensemble."))
-        self.date_prefix.toggled.connect(lambda _: self._naming_changed())
+        self.date_start.toggled.connect(lambda on: self._date_switched(self.date_start, on))
+        self.date_end.toggled.connect(lambda on: self._date_switched(self.date_end, on))
         self._naming_changed()
         return box
 
+    def date_position(self) -> str:
+        return "start" if self.date_start.isChecked() else "end" if self.date_end.isChecked() else "none"
+
+    def _date_switched(self, switch: ToggleSwitch, on: bool) -> None:
+        other = self.date_end if switch is self.date_start else self.date_start
+        if on and other.isChecked():
+            other.setChecked(False)  # une seule place pour la date
+        self._naming_changed()
+
     def _naming_changed(self) -> None:
-        self.name_example.setText("Exemple : " + ("2026-10-19_CV-ingenieur-IA.pdf" if self.date_prefix.isChecked()
-                                                  else "CV-ingenieur-IA.pdf"))
+        self.name_example.setText("Exemple : " + {"start": "2026-10-19_CV-ingenieur-IA.pdf",
+                                                  "end": "CV-ingenieur-IA_2026-10-19.pdf",
+                                                  "none": "CV-ingenieur-IA.pdf"}[self.date_position()])
 
     def _current_depth(self) -> int:
         try:
@@ -540,9 +554,9 @@ class SettingsDialog(QDialog):
             QMessageBox.information(self, "TriBin", note)
         if self.initial_mode == "personal" and mode == "personal" and self.depth() != self.initial_depth:
             set_personal_depth(Path(cfg.convention_path), self.depth())
-        self.naming_changed = self.date_prefix.isChecked() != self.initial_date_prefix and bool(cfg.convention_path)
+        self.naming_changed = self.date_position() != self.initial_date_position and bool(cfg.convention_path)
         if self.naming_changed:
-            set_date_prefix(Path(cfg.convention_path), self.date_prefix.isChecked())
+            set_date_position(Path(cfg.convention_path), self.date_position())
         cfg.auto_file = self.auto_file.isChecked()
         cfg.auto_min_confidence = self.threshold.value() / 100
         cfg.hotkey = self.hotkey.isChecked()
