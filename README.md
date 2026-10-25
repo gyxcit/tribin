@@ -140,6 +140,10 @@ uv run pytest
 uv run python -m tribin.ui.app
 ```
 
+Pour un agent de développement (Claude Code ou autre), le skill [`.claude/skills/lancer-tribin/SKILL.md`](.claude/skills/lancer-tribin/SKILL.md)
+résume comment lancer, essayer, mesurer et empaqueter l'application sans lire le code : garde-fou d'écriture,
+emplacement des données, jeux d'essai, ligne de commande.
+
 Au premier lancement : dossiers à ranger et à ne jamais toucher, convention (déduite de l'existant, ou un
 fichier déjà prêt), quelques questions facultatives, choix de l'IA. Ensuite :
 
