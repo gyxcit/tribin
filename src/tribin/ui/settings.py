@@ -18,11 +18,8 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
     QHBoxLayout,
-    QInputDialog,
     QLabel,
     QLineEdit,
-    QListWidget,
-    QListWidgetItem,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -32,19 +29,20 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from tribin import resources
 from tribin.config import save_api_key
 from tribin.learning.corrections import team_rule_alerts
-from tribin.learning.rules_store import delete_rule, list_rules, update_rule
 from tribin.service.bin import AUTO_MIN_CONFIDENCE
 from tribin.convention.loader import PERSONAL_DEPTH
 from tribin.service.conventions import (
+    MODES,
     create_convention,
     current_mode,
     date_position,
     set_date_position,
     set_personal_depth,
 )
-from tribin.service.profile import PRIVACY_NOTICE, save_profile
+from tribin.service.profile import save_profile
 from tribin.ui import system_integration
 from tribin.ui.components import (
     ApiKeyField,
@@ -63,6 +61,15 @@ from tribin.ui.onboarding import MODE_CHOICES, PROVIDERS
 
 if TYPE_CHECKING:
     from tribin.ui.app import AppController
+
+# Adresse de la page de confidentialité en ligne ; vide : page incluse dans TriBin
+PRIVACY_URL = ""
+PRIVACY_PAGE = Path(resources.__file__).with_name("confidentialite.html")
+
+
+def open_privacy_policy() -> None:
+    QDesktopServices.openUrl(QUrl(PRIVACY_URL) if PRIVACY_URL else QUrl.fromLocalFile(str(PRIVACY_PAGE)))
+
 
 DEPTH_EXAMPLE = ["Etudes", "Certifications", "Universite", "Licence", "2026"]
 MODELS = {"anthropic": ["claude-haiku-5-5", "claude-sonnet-5-5"],
@@ -112,6 +119,18 @@ class SettingsPage(QScrollArea):
         row.addWidget(holder, 0, Qt.AlignmentFlag.AlignTop)
         row.addWidget(control, 1, Qt.AlignmentFlag.AlignTop)
         self.body.addLayout(row)
+
+    def add_wide(self, title: str, help_text: str, control: QWidget) -> None:
+        """Réglage sur toute la largeur (titre et aide au-dessus) : listes et grands champs."""
+        self.body.addWidget(divider())
+        self.body.addSpacing(18)
+        self.body.addWidget(section(title))
+        if help_text:
+            self.body.addSpacing(2)
+            self.body.addWidget(muted(help_text))
+        self.body.addSpacing(12)
+        self.body.addWidget(control)
+        self.body.addSpacing(18)
 
     def finish(self) -> None:
         self.body.addStretch()
@@ -207,8 +226,14 @@ class SettingsDialog(QDialog):
             self.mode_cards[key] = card
             cards.append(card)
         self.mode_cards[self.initial_mode].radio.setChecked(True)
-        page.add_row("Utilisation", "Changer de mode crée la convention correspondante ; rien n'est déplacé.",
+        page.add_row("Utilisation", "Chaque mode a ses propres dossiers et sa convention ; rien n'est déplacé.",
                      column(*cards))
+        # dossiers de chaque mode, tels qu'affichés (changer de mode puis revenir ne perd rien)
+        self.shown_mode = self.initial_mode
+        self.mode_stash = {self.initial_mode: {"roots": list(cfg.roots), "local_excluded": list(cfg.local_excluded),
+                                               "convention_path": cfg.convention_path}}
+        for card in self.mode_cards.values():
+            card.radio.toggled.connect(lambda checked: checked and self._mode_switched())
         self.roots = roots_picker(cfg.roots)
         page.add_row("Dossiers à ranger", "TriBin ne range que dans ces dossiers.", self.roots)
         self.excluded = excluded_picker(cfg.local_excluded, self.roots.values)
@@ -314,6 +339,7 @@ class SettingsDialog(QDialog):
         layout.addLayout(row)
         self.depth_example = QLabel()
         self.depth_example.setFont(mono_font())
+        self.depth_example.setWordWrap(True)  # sinon l'exemple à 5 niveaux élargit toute la colonne (et le curseur)
         self.depth_hint = muted()
         layout.addWidget(self.depth_example)
         layout.addWidget(self.depth_hint)
@@ -360,7 +386,7 @@ class SettingsDialog(QDialog):
         self.threshold_hint = muted()
         layout.addWidget(self.threshold_hint)
         personal = self.initial_mode == "personal"
-        layout.addWidget(muted(("En mode personnel, une catégorie ou un sous-dossier manquant (dans la limite de la "
+        layout.addWidget(muted(("En mode Particulier, une catégorie ou un sous-dossier manquant (dans la limite de la "
                                 "profondeur) est créé sans demander. " if personal else "Un fichier qui demanderait un nouveau dossier attend "
                                 "toujours votre accord. ") + "Tout rangement s'annule depuis l'Historique."))
         self.auto_file.toggled.connect(lambda _: self._auto_changed())
@@ -406,7 +432,13 @@ class SettingsDialog(QDialog):
         self.api_key = ApiKeyField()
         page.add_row("Clé API", "Rangée dans le trousseau de l'ordinateur, jamais dans un fichier partagé.",
                      self.api_key)
-        page.add_row("Confidentialité", "", muted(PRIVACY_NOTICE))
+        privacy = QPushButton("Politique de confidentialité")
+        privacy.setObjectName("Link")
+        privacy.setIcon(line_icon("open", "#3B4CCA", 14))
+        privacy.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+        privacy.clicked.connect(open_privacy_policy)
+        page.add_row("Confidentialité", "Seul un extrait des fichiers est envoyé à l'IA, jamais le fichier entier.",
+                     column(privacy))
         current = ai_settings.provider if ai_settings.provider in self.provider_cards else "mistral"
         self.provider_cards[current].radio.setChecked(True)
         self._provider_changed()
@@ -415,7 +447,8 @@ class SettingsDialog(QDialog):
 
     def _learning_page(self) -> SettingsPage:
         svc = self.c.service
-        page = SettingsPage("Apprentissage", "Ce que TriBin sait de vous et ce qu'il a appris de vos corrections.")
+        page = SettingsPage("Apprentissage", "Ce que TriBin sait de vous, et les règles qu'il suit : apprises de vos "
+                            "corrections, confirmées par vos validations ou ajoutées par vous.")
         try:
             text = svc.settings.profile_path.read_text(encoding="utf-8")
         except OSError:
@@ -423,20 +456,17 @@ class SettingsDialog(QDialog):
         self.profile = QPlainTextEdit(text)
         self.profile.setMinimumHeight(140)
         page.add_row("Profil", "Inclus dans chaque demande à l'IA. Modifiable librement.", self.profile)
-        self.rules = QListWidget()
-        self.rules.setMinimumHeight(160)
-        self.rules.itemDoubleClicked.connect(self._edit_rule)
-        del_rule = QPushButton("Supprimer la règle sélectionnée")
-        del_rule.clicked.connect(self._delete_rule)
-        widgets = [self.rules, del_rule]
+        from tribin.ui.rules_view import RulesEditor
+
         alerts = team_rule_alerts(svc.db)
         if alerts:
             warning = QLabel("\n".join(alerts) + "\nPensez à en parler au référent des conventions.")
             warning.setObjectName("Warning")
             warning.setWordWrap(True)
-            widgets.insert(0, warning)
-        page.add_row("Règles apprises", "Tirées de vos corrections. Double-clic pour en modifier une.", column(*widgets))
-        self._load_rules()
+            page.add_wide("Règles d'équipe souvent corrigées", "", warning)
+        self.rules = RulesEditor(self.c)
+        page.add_wide("Règles", "Cliquez sur une règle pour voir sa logique. L'interrupteur l'active ou la met de côté ; "
+                      "les règles actives sont données à l'IA à chaque proposition.", self.rules)
         return page
 
     def _system_page(self) -> SettingsPage:
@@ -474,6 +504,19 @@ class SettingsDialog(QDialog):
 
     # --- actions ------------------------------------------------------------------------------
 
+    def _mode_switched(self) -> None:
+        """Particulier <-> Professionnel : affiche les dossiers et la convention du mode choisi."""
+        new = self.mode()
+        if new == self.shown_mode or not hasattr(self, "convention"):
+            return
+        self.mode_stash[self.shown_mode] = {"roots": self.roots.values(), "local_excluded": self.excluded.values(),
+                                            "convention_path": self.convention.text().strip()}
+        values = self.mode_stash.get(new) or self.c.service.config.mode_values(new)
+        self.roots.set_values(values["roots"])
+        self.excluded.set_values(values["local_excluded"])
+        self.convention.setText(values["convention_path"])
+        self.shown_mode = new
+
     def mode(self) -> str:
         checked = self.mode_group.checkedButton()
         return checked.property("mode") if checked else "work"
@@ -494,24 +537,6 @@ class SettingsDialog(QDialog):
         path, _ = QFileDialog.getOpenFileName(self, "Fichier de convention", self.convention.text(), "YAML (*.yaml *.yml)")
         if path:
             self.convention.setText(path)
-
-    def _load_rules(self) -> None:
-        self.rules.clear()
-        for rule in list_rules(self.c.service.db):
-            item = QListWidgetItem(rule.text)
-            item.setData(Qt.ItemDataRole.UserRole, rule.id)
-            self.rules.addItem(item)
-
-    def _edit_rule(self, item: QListWidgetItem) -> None:
-        text, ok = QInputDialog.getText(self, "Modifier la règle", "Règle :", text=item.text())
-        if ok and text.strip():
-            update_rule(self.c.service.db, item.data(Qt.ItemDataRole.UserRole), text)
-            self._load_rules()
-
-    def _delete_rule(self) -> None:
-        for item in self.rules.selectedItems():
-            delete_rule(self.c.service.db, item.data(Qt.ItemDataRole.UserRole))
-        self._load_rules()
 
     def _refresh_context_menu(self) -> None:
         installed = system_integration.context_menu_installed()
@@ -544,14 +569,25 @@ class SettingsDialog(QDialog):
     def _save(self) -> None:
         svc = self.c.service
         cfg = svc.config
-        cfg.roots = self.roots.values()
+        mode = self.mode()
+        roots = self.roots.values()
+        if not roots:
+            QMessageBox.information(self, "TriBin", f"Choisissez au moins un dossier à ranger pour le mode "
+                                    f"{MODES[mode]} (Réglages › Dossiers).")
+            return
+        if mode != self.initial_mode:  # l'ancien mode garde ses dossiers et sa convention
+            old = self.mode_stash.get(self.initial_mode) or {}
+            cfg.by_mode[self.initial_mode] = {"roots": old.get("roots", cfg.roots),
+                                              "local_excluded": old.get("local_excluded", cfg.local_excluded),
+                                              "convention_path": old.get("convention_path", cfg.convention_path)}
+        cfg.roots = roots
         cfg.local_excluded = self.excluded.values()
         cfg.convention_path = self.convention.text().strip()
-        mode = self.mode()
-        if mode != self.initial_mode and cfg.roots:  # travail <-> personnel : convention du nouveau mode
-            path, note = create_convention(mode, cfg.roots, svc.settings.data_dir)
+        if mode != self.initial_mode and not (cfg.convention_path and Path(cfg.convention_path).is_file()):
+            path, note = create_convention(mode, cfg.roots, svc.settings.data_dir)  # première utilisation du mode
             cfg.convention_path = str(path)
             QMessageBox.information(self, "TriBin", note)
+        cfg.remember_mode(mode)
         if self.initial_mode == "personal" and mode == "personal" and self.depth() != self.initial_depth:
             set_personal_depth(Path(cfg.convention_path), self.depth())
         self.naming_changed = self.date_position() != self.initial_date_position and bool(cfg.convention_path)

@@ -20,7 +20,7 @@ from tribin.models import NameFields, Proposal
 log = logging.getLogger(__name__)
 
 IMPLICIT_DAYS = 14
-SUMMARY_EVERY = 20
+SUMMARY_EVERY = 5  # règles apprises re-synthétisées toutes les 5 corrections
 MAX_RULES = 8
 
 
@@ -94,7 +94,7 @@ SUMMARY_SYSTEM = (
 
 
 def maybe_summarize(db: Database, llm: LLMProvider | None, every: int = SUMMARY_EVERY, force: bool = False) -> bool:
-    """Toutes les 20 corrections, régénère les règles lisibles. Renvoie True si les règles ont changé."""
+    """Toutes les 5 corrections, régénère les règles lisibles. Renvoie True si les règles ont changé."""
     learnable = [c for c in list_corrections(db, 1000) if c.decision in LEARNABLE and not c.contradicts_team]
     bucket = len(learnable) // every
     if llm is None or (not force and (bucket == 0 or bucket <= (db.get_setting("rules_bucket", 0) or 0))):
@@ -102,7 +102,7 @@ def maybe_summarize(db: Database, llm: LLMProvider | None, every: int = SUMMARY_
     lines = [f"- « {c.original_name} » : l'IA proposait {c.ai_folder}/{c.ai_name} ; choix final "
              f"{c.final_folder}/{c.final_name} (modifié : {', '.join(f for f in c.changed_fields if ':' not in f)})"
              for c in learnable[:60]]
-    current = [r.text for r in list_rules(db)]
+    current = [r.text for r in list_rules(db, kind="learned")]
     user = "Corrections récentes :\n" + "\n".join(lines)
     if current:
         user += "\n\nRègles actuelles (éventuellement modifiées par l'utilisateur, à conserver sauf contradiction) :\n" + \
@@ -112,6 +112,6 @@ def maybe_summarize(db: Database, llm: LLMProvider | None, every: int = SUMMARY_
     except LLMError as exc:
         log.warning("rules summary failed: %s", exc)
         return False
-    replace_rules(db, summary.rules[:MAX_RULES])
+    replace_rules(db, summary.rules[:MAX_RULES], {"count": len(learnable), "corrections": lines[:10]})
     db.set_setting("rules_bucket", bucket)
     return True

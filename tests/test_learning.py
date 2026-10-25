@@ -155,3 +155,46 @@ def test_examples_filtered_by_similarity(settings, sb):
     similar = extract(sb / "inbox" / "devis_imprimeur_2.txt")
     assert len(similar_examples(svc.db, similar, "ACME")) == 1
     assert original_name("Nom d'origine : x.pdf\n") == "x.pdf"
+
+
+def test_rule_kinds_confirmed_rules_and_text_view(tmp_path):
+    from tribin.db import Database
+    from tribin.learning.rules_store import (
+        add_rule,
+        apply_text,
+        delete_rule,
+        list_rules,
+        refresh_confirmed_rules,
+        replace_rules,
+        rules_as_text,
+    )
+
+    db = Database(tmp_path / "t.db")
+
+    def accepted(name, folder):
+        with db.tx() as c:
+            c.execute("INSERT INTO corrections(ts, original_name, extension, final_folder, final_name, decision, "
+                      "changed_fields, contradicts_team, source) VALUES('2026-10-25', ?, '.pdf', ?, ?, 'accepted', "
+                      "'[]', 0, 'explicit')", (name, folder, name))
+
+    accepted("2026_07_likassi_regis_2026_07_28T13_45_02.pdf", "salaire")
+    assert refresh_confirmed_rules(db) == 0  # une seule validation : pas encore une règle
+    accepted("2026_08_likassi_regis_2026_08_29T10_12_44.pdf", "salaire")
+    assert refresh_confirmed_rules(db) == 1
+    rule = list_rules(db, kind="confirmed")[0]
+    assert "salaire" in rule.text and rule.details["count"] == 2 and len(rule.details["examples"]) == 2
+    delete_rule(db, rule.id)
+    assert refresh_confirmed_rules(db) == 0 and not list_rules(db, kind="confirmed")  # supprimée : jamais recréée
+
+    add_rule(db, "Les factures d'électricité vont dans Logement/Energie.")
+    replace_rules(db, ["Les devis signés vont dans Admin."], {"count": 5, "corrections": ["- « a.pdf »"]})
+    assert [r.kind for r in list_rules(db)] == ["manual", "learned"]  # la synthèse garde les règles ajoutées
+    text = rules_as_text(db)
+    assert "[ajoutée] Les factures" in text and "[apprise] Les devis" in text
+    apply_text(db, text.replace("[apprise] Les devis", "# [apprise] Les devis") + "\nLes CV vont dans Etudes/CV.")
+    rules = {r.text: r for r in list_rules(db)}
+    assert not rules["Les devis signés vont dans Admin."].enabled  # « # » : désactivée, logique gardée
+    assert rules["Les devis signés vont dans Admin."].details["count"] == 5
+    assert rules["Les CV vont dans Etudes/CV."].kind == "manual"
+    apply_text(db, "Les CV vont dans Etudes/CV.")
+    assert [r.text for r in list_rules(db)] == ["Les CV vont dans Etudes/CV."]  # lignes effacées : supprimées

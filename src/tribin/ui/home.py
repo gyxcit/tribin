@@ -218,7 +218,9 @@ class HomeView(QWidget):
         items = placements(Journal(self.c.service.settings.journal_dir))
         stats = compute_stats(items)
         pending = self.c.service.pending()
-        name = (self.c.service.settings.user or "").split("\\")[-1].split(".")[0].capitalize()
+        from tribin.service.account import get_account
+
+        name = get_account(self.c.service.db, self.c.service.settings.user).display_name.split()[0]
         hello = "Bonsoir" if datetime.now().hour >= 18 else "Bonjour"
         self.greeting.setText(f"{hello}{', ' + name if name else ''} !")
         month = stats.this_month

@@ -32,31 +32,50 @@ possibilités. Les actions sont en bas : « Ranger ici » (Entrée), « Passer �
 |---|---|---|
 | ![Au repos](docs/screenshots/widget-repos.png) | ![Analyse](docs/screenshots/widget-analyse.png) | ![Prêt](docs/screenshots/widget-pret.png) |
 
-**Premier lancement**, en cinq étapes listées à gauche : bienvenue, utilisation (personnel ou travail), dossiers
-à ranger et à ne jamais toucher (choisis un par un), quelques questions facultatives (mode travail), choix de l'IA
+**Premier lancement**, en cinq étapes listées à gauche : bienvenue, utilisation (Particulier ou Professionnel), dossiers
+à ranger et à ne jamais toucher (choisis un par un), quelques questions facultatives (mode Professionnel), choix de l'IA
 (Mistral, Claude ou Gemini).
 
 **Deux modes**, au choix (et modifiable dans Réglages › Dossiers) :
 
-- **Personnel** : papiers, factures, bulletins de paie, photos… rangés par **catégorie**, puis dans des
+- **Particulier** : papiers, factures, bulletins de paie, photos… rangés par **catégorie**, puis dans des
   sous-dossiers choisis par l'IA jusqu'à la **profondeur maximum** réglée (3 par défaut :
   `Etudes/Certifications/Universite`). Les dossiers déjà présents (ex. `salaire`) deviennent des catégories ; les sous-dossiers existants sont réutilisés. Si aucune
   catégorie ne convient, TriBin **en crée une** (ex. `Voyages`) et l'ajoute à la liste, y compris en rangement
   automatique ; tout reste annulable depuis l'Historique.
-- **Travail** : les fichiers d'une équipe, par client / année / projet / catégorie selon la convention partagée ;
+- **Professionnel** : les fichiers d'une équipe, par client / année / projet / catégorie selon la convention partagée ;
   TriBin n'invente jamais de catégorie et demande toujours avant de créer un dossier.
 
-| 1. Bienvenue | 2. Utilisation (personnel ou travail) |
+| 1. Bienvenue | 2. Utilisation (Particulier ou Professionnel) |
 |---|---|
 | ![Bienvenue](docs/screenshots/onboarding.png) | ![Utilisation](docs/screenshots/onboarding-2.png) |
 
-| 3. Vos dossiers | 4. Votre activité (mode travail) | 5. Intelligence artificielle |
+| 3. Vos dossiers | 4. Votre activité (mode Professionnel) | 5. Intelligence artificielle |
 |---|---|---|
 | ![Vos dossiers](docs/screenshots/onboarding-3.png) | ![Questions](docs/screenshots/onboarding-4.png) | ![IA](docs/screenshots/onboarding-5.png) |
 
 | Réglages › Dossiers | Réglages › Intelligence artificielle |
 |---|---|
 | ![Réglages](docs/screenshots/reglages.png) | ![Réglages IA](docs/screenshots/reglages-ia.png) |
+
+**Dossiers par mode** : les dossiers à ranger et ceux à ne jamais toucher sont propres à chaque mode ; passer de
+Particulier à Professionnel dans Réglages › Dossiers affiche les dossiers de ce mode, et ceux de l'autre sont gardés.
+
+**Apprentissage** : TriBin suit des règles visibles et modifiables, en cartes dépliables qui montrent leur logique :
+- *apprises de vos corrections* (synthèse par l'IA toutes les 5 corrections, ou sur « Analyser mes corrections ») ;
+- *confirmées par vos validations* : un même type de fichier validé sans modification au moins deux fois vers le
+  même dossier ;
+- *ajoutées par vous* (bouton « Ajouter une règle »).
+
+Chaque règle peut être modifiée, mise de côté (interrupteur) ou supprimée. La vue **Texte** donne toutes les règles
+dans un grand champ à copier ou coller (une règle par ligne, `#` au début pour la mettre de côté).
+
+| Réglages › Apprentissage |
+|---|
+| ![Réglages Apprentissage](docs/screenshots/reglages-apprentissage.png) |
+
+**Compte** : en bas de la barre latérale, le compte de l'utilisateur (nom, e-mail), enregistré localement dans la
+base SQLite de TriBin. Il prépare la connexion future aux serveurs de l'entreprise.
 
 Captures réalisées avec des données de démonstration et une IA simulée ; pour les régénérer :
 `uv run python scripts/make_screenshots.py`.

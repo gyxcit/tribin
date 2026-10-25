@@ -471,12 +471,28 @@ def test_personal_mode_in_onboarding_and_settings(qapp, controller, monkeypatch)
     conv = controller.service.convention()
     assert conv.personal and "Salaires" in conv.category_codes() and "ACME" in conv.category_codes()
 
+    personal_roots = controller.service.config.roots
     dialog = SettingsDialog(controller)
     controller.extra.append(dialog)
     assert dialog.mode() == "personal"
     dialog.mode_cards["work"].radio.setChecked(True)
+    assert dialog.roots.values() == []  # le mode Travail a ses propres dossiers (aucun pour l'instant)
+    dialog._save()  # refusé : aucun dossier pour le mode Travail
+    assert controller.service.convention().personal
+    work_root = controller.sb / "root" / "ACME"
+    dialog.roots.add_value(str(work_root))
     dialog._save()
-    assert not controller.service.convention().personal
+    cfg = controller.service.config
+    assert not controller.service.convention().personal and cfg.roots == [str(work_root)]
+
+    back = SettingsDialog(controller)  # retour au mode Personnel : ses dossiers reviennent
+    controller.extra.append(back)
+    back.mode_cards["personal"].radio.setChecked(True)
+    assert back.roots.values() == personal_roots
+    back._save()
+    cfg = controller.service.config
+    assert controller.service.convention().personal and cfg.roots == personal_roots
+    assert cfg.by_mode["work"]["roots"] == [str(work_root)]
 
 
 def test_history_reveal_button(qapp, controller, monkeypatch):
@@ -668,3 +684,47 @@ def test_date_prefix_switch_renames_pending_files(qapp, controller, monkeypatch)
     controller.show_settings()  # « Terminer par la date », puis Enregistrer
     assert controller.service.convention().naming.template.endswith("{date}")
     assert controller.service.pending()[0].proposal.new_name == "ACME_2026-042_Devis-impression_2026-10-12.pdf"
+
+
+def test_account_chip_and_dialog(qapp, controller, monkeypatch):
+    from tribin.ui.account import AccountDialog
+
+    chip = controller.bin_window.account_chip
+    assert chip.status.text() == "Compte local" and chip.name.text()
+
+    def fill(self):
+        self.name.setText("Regis Likassi")
+        self._save()
+        return True
+
+    monkeypatch.setattr(AccountDialog, "exec", fill)
+    chip.clicked.emit()  # clic sur le compte en bas de la navigation
+    assert chip.name.text() == "Regis Likassi" and chip.avatar.text() == "RL"
+    controller.bin_window.show_page("home")
+    assert "Regis" in controller.bin_window.home.greeting.text()
+
+
+def test_rules_editor_list_and_text_views(qapp, controller, monkeypatch):
+    from PySide6.QtWidgets import QInputDialog
+
+    from tribin.learning.rules_store import list_rules
+    from tribin.ui.rules_view import RuleRow, RulesEditor
+
+    editor = RulesEditor(controller)
+    controller.extra.append(editor)
+    labels = [w.text() for w in editor.findChildren(QLabel)]
+    assert any(t.startswith("Apprises de vos corrections") for t in labels)
+    assert any(t.startswith("Confirmées par vos validations") for t in labels)
+    monkeypatch.setattr(QInputDialog, "getMultiLineText",
+                        lambda *a, **k: ("Les factures d'électricité vont dans Logement/Energie.", True))
+    editor.add_rule()  # bouton « Ajouter une règle »
+    rules = list_rules(controller.service.db)
+    assert rules[-1].kind == "manual" and rules[-1].enabled
+    rows = [r for r in editor.findChildren(RuleRow) if r.isVisibleTo(editor)]
+    assert len(rows) == 1 and not rows[0].details.isVisibleTo(rows[0])
+    rows[0].toggle()  # carte dépliée : la logique
+    assert rows[0].details.isVisibleTo(rows[0])
+    rows[0].switch.click()  # interrupteur : règle mise de côté
+    assert not list_rules(controller.service.db)[-1].enabled
+    editor.show_view(1)  # vue texte
+    assert "# [ajoutée] Les factures" in editor.text.toPlainText()

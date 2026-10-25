@@ -1,5 +1,5 @@
 version: 1
-name: "Rangement personnel"
+name: "Rangement particulier"
 language: fr
 # Mode personnel : ni client ni projet ; rangement par catégorie, puis sous-dossiers choisis par l'IA
 # (au plus max_depth niveaux : « Etudes/Certifications/Universite »).

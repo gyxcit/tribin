@@ -1,7 +1,7 @@
 """Premier lancement, en cinq étapes courtes (section 6.8), listées dans une colonne à gauche.
 
-1. Bienvenue et confidentialité · 2. Utilisation (travail ou personnel) · 3. Vos dossiers
-4. Votre activité (facultatif, mode travail seulement) · 5. Intelligence artificielle (fournisseur et clé, facultatifs)
+1. Bienvenue et confidentialité · 2. Utilisation (Particulier ou Professionnel) · 3. Vos dossiers
+4. Votre activité (facultatif, mode Professionnel seulement) · 5. Intelligence artificielle (fournisseur et clé, facultatifs)
 """
 
 from __future__ import annotations
@@ -47,9 +47,9 @@ RAIL_NOTES = ("Rien n'est supprimé ni écrasé. Chaque rangement s'annule depui
               "Vos réponses restent sur cet ordinateur.",
               "Seul un extrait des fichiers est envoyé à l'IA, jamais le fichier entier.")
 MODE_CHOICES = (
-    ("personal", "Personnel", "Vos papiers, factures, bulletins de paie, photos… rangés par catégorie puis par année. "
-                              "Si aucune catégorie ne convient, TriBin en crée une."),
-    ("work", "Travail (agence, studio)", "Les fichiers de l'équipe, rangés par client, année, projet et catégorie "
+    ("personal", "Particulier", "Vos papiers, factures, bulletins de paie, photos… rangés par catégorie, puis dans "
+                                "des sous-dossiers si besoin. Si aucune catégorie ne convient, TriBin en crée une."),
+    ("work", "Professionnel (agence, studio)", "Les fichiers de l'équipe, rangés par client, année, projet et catégorie "
                                           "selon la convention de l'équipe."),
 )
 # (clé, nom, description, où créer la clé, recommandé)
@@ -256,7 +256,8 @@ class OnboardingWizard(QWizard):
     def _mode_page(self) -> QWizardPage:
         page = QWizardPage()
         layout = page_layout(page, "Comment allez-vous utiliser TriBin ?",
-                             "TriBin range différemment des papiers personnels et les fichiers d'une équipe.")
+                             "TriBin range différemment les papiers d'un particulier et les fichiers d'une équipe "
+                             "professionnelle.")
         self.mode_group = QButtonGroup(page)
         self.mode_cards: dict[str, ChoiceCard] = {}
         for key, title, description in MODE_CHOICES:
@@ -443,6 +444,7 @@ class OnboardingWizard(QWizard):
         cfg.roots = roots
         cfg.local_excluded = self.excluded.values()
         cfg.convention_path = str(convention_path)
+        cfg.remember_mode(self.mode())  # chaque mode garde ses propres dossiers
         cfg.onboarding_done = True
         cfg.privacy_accepted = True
         svc.update_config(cfg)

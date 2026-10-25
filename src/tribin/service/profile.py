@@ -15,7 +15,7 @@ QUESTIONS: list[tuple[str, str, list[str], bool]] = [
     # (clé, question, choix, choix multiple)
     ("secteur", "Votre secteur", ["Agence de pub / com", "Studio créatif", "Freelance", "Autre"], False),
     ("role", "Votre rôle", ["Créa", "Chef de projet", "Production", "Commercial / admin", "Direction", "Autre"], False),
-    ("usage", "Usage", ["Personnel", "En équipe"], False),
+    ("usage", "Vous travaillez", ["Seul", "En équipe"], False),
     ("types", "Types de fichiers principaux", ["Visuels", "Documents", "Vidéo", "Admin / factures", "Mise en page", "Autre"], True),
     ("situation", "Situation", ["Une structure existe à respecter", "Structure à créer de zéro",
                                 "À réorganiser (bientôt disponible)"], False),

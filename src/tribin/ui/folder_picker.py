@@ -79,6 +79,18 @@ class FolderPicker(QWidget):
             self._refresh()
             self.changed.emit()
 
+    def set_values(self, values: list[str]) -> None:
+        """Remplace toute la liste (ex. changement de mode Particulier / Professionnel dans les réglages)."""
+        while self.rows.count():
+            widget = self.rows.takeAt(0).widget()
+            if widget:
+                widget.hide()
+                widget.deleteLater()
+        self.values_ = []
+        for value in values:
+            self._add_row(value)
+        self._refresh()
+
     def pick(self) -> None:
         chosen = QFileDialog.getExistingDirectory(self, self.dialog_title, self.start_dir())
         if not chosen:

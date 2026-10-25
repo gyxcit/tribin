@@ -294,6 +294,13 @@ class AppController:
         for file_id in self.service.retry_without_ai():
             self._analyze(file_id)
 
+    def show_account(self) -> None:
+        from tribin.ui.account import AccountDialog
+
+        if AccountDialog(self).exec():
+            self.bin_window.update_account()
+            self.bin_window.home.reload()
+
     def set_drop_widget_visible(self, visible: bool) -> None:
         self.drop_widget.setVisible(visible)
 

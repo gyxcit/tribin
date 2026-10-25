@@ -37,7 +37,6 @@ from tribin.ui.queue_panel import QueuePanel
 if TYPE_CHECKING:
     from tribin.ui.app import AppController
 
-PROVIDER_NAMES = {"anthropic": "Claude", "gemini": "Gemini", "mistral": "Mistral"}
 
 
 def nav_item(text: str, icon: str, checkable: bool = False) -> QPushButton:
@@ -134,10 +133,13 @@ class BinWindow(QMainWindow):
         settings = nav_item("Réglages", "settings")
         settings.clicked.connect(self.c.show_settings)
         col.addWidget(settings)
-        self.ai_chip = QLabel()
-        self.ai_chip.setObjectName("AiStatus")
-        self.ai_chip.setTextFormat(Qt.TextFormat.RichText)
-        col.addWidget(self.ai_chip)
+        from tribin.ui.account import AccountChip
+
+        col.addSpacing(4)
+        self.account_chip = AccountChip()
+        self.account_chip.clicked.connect(self.c.show_account)
+        col.addWidget(self.account_chip)
+        self.update_account()
         self.nav_buttons["home"].setChecked(True)  # la fenêtre s'ouvre sur l'Accueil
         return side
 
@@ -212,24 +214,15 @@ class BinWindow(QMainWindow):
             self._edits = kept
             self._save_edits()
         self.pending_count.setText(str(len(items)) if items else "")
-        self._update_ai_chip()
         self.bin_pages.setCurrentIndex(1 if items or self.aside else 0)
         if self.pages.currentWidget() is self.home:
             self.home.reload()  # compteurs et derniers rangements à jour
         self.queue.set_items(items, current, self.aside)
 
-    def _update_ai_chip(self) -> None:
-        try:
-            settings = self.c.service.ai_settings()
-            name = PROVIDER_NAMES.get(settings.provider, settings.provider)
-            ok = bool(settings.api_key)
-            text = f"IA : {name}" if ok else f"IA : {name}, clé manquante"
-            tip = f"Modèle : {settings.model}. Modifiable dans les Réglages."
-        except Exception:
-            ok, text, tip = False, "IA non configurée", "À configurer dans les Réglages."
-        color = "#14B8A6" if ok else "#F0605A"
-        self.ai_chip.setText(f'<span style="color:{color}">●</span>&nbsp; {text}')
-        self.ai_chip.setToolTip(tip)
+    def update_account(self) -> None:
+        from tribin.service.account import get_account
+
+        self.account_chip.set_account(get_account(self.c.service.db, self.c.service.settings.user))
 
     def _save_edits(self) -> None:
         try:

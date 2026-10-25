@@ -317,3 +317,16 @@ def test_date_position_template():
     for template, position in (("{date}_{description}", "start"), ("{description}_{date}", "end"),
                                ("{description}", "none")):
         assert date_position(Convention.model_validate({"naming": {"template": template}})) == position
+
+
+def test_local_account(settings):
+    from tribin.db import Database
+    from tribin.service.account import default_name, get_account, save_account
+
+    db = Database(settings.db_path)
+    account = get_account(db, "regis")
+    assert account.display_name == "Regis" and account.kind == "local" and account.status == "Compte local"
+    assert get_account(db).created_at == account.created_at  # une seule ligne, créée une fois
+    saved = save_account(db, "Regis Likassi", "regis@exemple.fr")
+    assert saved.initials == "RL" and get_account(db).email == "regis@exemple.fr"
+    assert default_name("DOMAINE" + chr(92) + "jean.dupont") == "Jean Dupont"

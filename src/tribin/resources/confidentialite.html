@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TriBin — Politique de confidentialité</title>
+<style>
+  :root { --ink: #1F2544; --muted: #5B6080; --line: #E2E5EF; --teal: #0F766E; --bg: #F6F7FB; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 "Segoe UI", system-ui, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 48px 24px 64px; }
+  h1 { font-size: 30px; margin: 0 0 6px; }
+  .lead { color: var(--muted); margin: 0 0 32px; }
+  section { background: white; border: 1px solid var(--line); border-radius: 12px; padding: 20px 24px; margin-bottom: 16px; }
+  h2 { font-size: 18px; margin: 0 0 8px; }
+  ul { margin: 8px 0 0; padding-left: 20px; }
+  .ok { color: var(--teal); font-weight: 600; }
+  a { color: #3B4CCA; }
+  footer { color: var(--muted); font-size: 14px; margin-top: 24px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Politique de confidentialité</h1>
+  <p class="lead">Ce que TriBin envoie à l'intelligence artificielle, et ce qui reste sur votre ordinateur.</p>
+
+  <section>
+    <h2>Ce qui est envoyé à l'IA</h2>
+    <p>Pour proposer un dossier et un nom, TriBin envoie au service d'IA que vous avez choisi (Mistral, Anthropic ou
+      Google) un <strong>extrait</strong> du fichier, jamais le fichier complet :</p>
+    <ul>
+      <li>son nom, son type, sa taille et ses dates ;</li>
+      <li>au plus 4 000 caractères de son texte ;</li>
+      <li>pour une image ou un PDF sans texte, une image réduite à 1 024 pixels ;</li>
+      <li>la liste de vos dossiers candidats, vos règles apprises et quelques corrections passées.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Ce qui reste sur votre ordinateur</h2>
+    <ul>
+      <li>vos fichiers : TriBin les déplace et les renomme, il ne les copie nulle part ;</li>
+      <li>la base locale (compte, réglages, file d'attente, règles apprises) et le journal des opérations ;</li>
+      <li>votre clé API, rangée dans le trousseau du système ;</li>
+      <li>vos réponses du premier lancement.</li>
+    </ul>
+    <p class="ok">Aucune télémétrie : TriBin n'envoie aucune statistique d'usage.</p>
+  </section>
+
+  <section>
+    <h2>Les services d'IA</h2>
+    <p>Les extraits envoyés sont traités selon la politique du fournisseur choisi :
+      <a href="https://mistral.ai/terms#privacy-policy">Mistral AI</a>,
+      <a href="https://www.anthropic.com/legal/privacy">Anthropic</a>,
+      <a href="https://policies.google.com/privacy">Google</a>.</p>
+  </section>
+
+  <section>
+    <h2>Vos droits</h2>
+    <p>Vous pouvez à tout moment supprimer vos règles apprises et votre profil (Réglages › Apprentissage), changer de
+      fournisseur d'IA ou retirer votre clé (Réglages › Intelligence artificielle).</p>
+  </section>
+
+  <footer>TriBin — version locale. Cette page sera publiée en ligne avec les comptes TriBin.</footer>
+</main>
+</body>
+</html>

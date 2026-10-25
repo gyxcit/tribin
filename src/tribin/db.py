@@ -8,7 +8,7 @@ import threading
 from contextlib import contextmanager
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS settings (
@@ -61,6 +61,14 @@ CREATE TABLE IF NOT EXISTS learned_rules (
     created_at TEXT NOT NULL,
     enabled INTEGER NOT NULL DEFAULT 1
 );
+CREATE TABLE IF NOT EXISTS account (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    display_name TEXT NOT NULL,
+    email TEXT NOT NULL DEFAULT '',
+    kind TEXT NOT NULL DEFAULT 'local',
+    server_id TEXT,
+    created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS placed_files (
     operation_id TEXT PRIMARY KEY,
     path TEXT NOT NULL,
@@ -87,8 +95,19 @@ class Database:
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.executescript(SCHEMA)
+        self._migrate()
         self._conn.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
         self._conn.commit()
+
+    def _migrate(self) -> None:
+        """Colonnes ajoutées après coup (bases créées par une version précédente)."""
+        columns = {r["name"] for r in self._conn.execute("PRAGMA table_info(learned_rules)")}
+        for name, ddl in (("kind", "TEXT NOT NULL DEFAULT 'learned'"),  # learned · confirmed · manual
+                          ("details", "TEXT NOT NULL DEFAULT '{}'"),  # la logique de la règle (exemples, nombre)
+                          ("rule_key", "TEXT"),  # règles confirmées : identifiant stable (modèle de nom + dossier)
+                          ("updated_at", "TEXT")):
+            if name not in columns:
+                self._conn.execute(f"ALTER TABLE learned_rules ADD COLUMN {name} {ddl}")
 
     @contextmanager
     def tx(self):

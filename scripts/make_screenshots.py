@@ -137,6 +137,30 @@ def main() -> None:
     settings_dialog.pages.setCurrentIndex(2)
     settings_dialog.nav.button(2).setChecked(True)
     save(settings_dialog, "reglages-ia.png")
+    from tribin.learning.rules_store import add_rule
+    from tribin.ui.rules_view import RulesEditor
+
+    db = controller.service.db
+    add_rule(db, "Les devis signés vont dans Admin/Devis, pas dans Factures.", "learned",
+             {"count": 6, "corrections": ["- « devis_signe.pdf » : dossier Factures → Admin/Devis"]})
+    add_rule(db, "Les fichiers nommés comme « 2026_07_likassi_regis.pdf » vont dans « Salaire ».", "confirmed",
+             {"count": 3, "folder": "Salaire", "examples": ["« 2026_07_likassi_regis.pdf » → Salaire/2026-07_bulletin.pdf"]},
+             rule_key="demo")
+    add_rule(db, "Les factures d'électricité vont dans Logement/Energie.")
+    learning = settings_dialog.pages.widget(3)
+    for editor in learning.findChildren(RulesEditor):
+        editor.reload()
+    settings_dialog.pages.setCurrentIndex(3)
+    settings_dialog.nav.button(3).setChecked(True)
+    from PySide6.QtWidgets import QScrollArea
+
+    settings_dialog.show()
+    app.processEvents()
+    for area in [learning, *learning.findChildren(QScrollArea)]:  # les règles, sous le profil
+        if not isinstance(area, QScrollArea):
+            continue
+        area.verticalScrollBar().setValue(area.verticalScrollBar().maximum())
+    save(settings_dialog, "reglages-apprentissage.png")
     settings_dialog.pages.setCurrentIndex(4)
     settings_dialog.nav.button(4).setChecked(True)
     save(settings_dialog, "reglages-systeme.png")

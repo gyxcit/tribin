@@ -1,4 +1,4 @@
-"""Création de la convention selon le mode d'utilisation : travail (agence) ou personnel."""
+"""Création de la convention selon le mode d'utilisation : Professionnel (agence) ou Particulier."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from tribin.convention.naming import strip_accents
 from tribin.mapping.infer import infer_convention
 from tribin.mapping.scanner import scan_root
 
-MODES = {"work": "Travail", "personal": "Personnel"}
+MODES = {"work": "Professionnel", "personal": "Particulier"}
 PERSONAL_TEMPLATE = Path(resources.__file__).with_name("convention.personal.yaml")
 WORK_EXAMPLE = Path(resources.__file__).with_name("convention.example.yaml")
 PERSONAL_FILE = "convention_personnel.yaml"
@@ -71,7 +71,8 @@ def create_convention(mode: str, roots: list[str], data_dir: Path) -> tuple[Path
         target = data_dir / PERSONAL_FILE
         base = load_convention(target) if target.exists() else None  # garde les catégories déjà créées
         save_convention(personal_convention(roots, base), target)
-        return target, ("Mode personnel : vos fichiers sont rangés par catégorie puis par année. Si aucune catégorie "
+        return target, ("Mode Particulier : vos fichiers sont rangés par catégorie, puis dans des sous-dossiers si "
+                        "besoin. Si aucune catégorie "
                         "ne convient, TriBin en crée une.")
     target = data_dir / "convention.yaml"
     if target.exists():
