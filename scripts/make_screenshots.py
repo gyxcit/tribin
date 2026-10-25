@@ -125,17 +125,26 @@ def main() -> None:
         widget.set_state(**state)
         save(widget, name)
     settings_dialog = SettingsDialog(controller)
+    from tribin.ui.settings import PAGES
+
+    def page_index(key: str) -> int:
+        return [k for k, *_ in PAGES].index(key)
+
+    def show_settings_page(key: str) -> None:
+        settings_dialog.pages.setCurrentIndex(page_index(key))
+        settings_dialog.nav.button(page_index(key)).setChecked(True)
+
     save(settings_dialog, "reglages.png", (960, 660))
     settings_dialog.auto_file.setChecked(True)
     settings_dialog.threshold.setValue(80)
-    settings_dialog.pages.setCurrentIndex(1)
-    settings_dialog.nav.button(1).setChecked(True)
+    show_settings_page("filing")
     deadline = time.time() + 0.5
     while time.time() < deadline:  # fin de l'animation de l'interrupteur
         app.processEvents()
     save(settings_dialog, "reglages-auto.png")
-    settings_dialog.pages.setCurrentIndex(2)
-    settings_dialog.nav.button(2).setChecked(True)
+    show_settings_page("permissions")
+    save(settings_dialog, "reglages-autorisations.png")
+    show_settings_page("ai")
     save(settings_dialog, "reglages-ia.png")
     from tribin.learning.rules_store import add_rule
     from tribin.ui.rules_view import RulesEditor
@@ -147,11 +156,14 @@ def main() -> None:
              {"count": 3, "folder": "Salaire", "examples": ["« 2026_07_likassi_regis.pdf » → Salaire/2026-07_bulletin.pdf"]},
              rule_key="demo")
     add_rule(db, "Les factures d'électricité vont dans Logement/Energie.")
-    learning = settings_dialog.pages.widget(3)
+    for text in ("Les bannières web vont dans Clients/<client>/Web, jamais dans Print.",
+                 "Les plannings de chantier gardent leur numéro de version à la fin du nom.",
+                 "Les photos IMG_ sans projet identifié restent à vérifier."):
+        add_rule(db, text, "learned", {"count": 4})
+    learning = settings_dialog.pages.widget(page_index("learning"))
     for editor in learning.findChildren(RulesEditor):
         editor.reload()
-    settings_dialog.pages.setCurrentIndex(3)
-    settings_dialog.nav.button(3).setChecked(True)
+    show_settings_page("learning")
     from PySide6.QtWidgets import QScrollArea
 
     settings_dialog.show()
@@ -161,9 +173,16 @@ def main() -> None:
             continue
         area.verticalScrollBar().setValue(area.verticalScrollBar().maximum())
     save(settings_dialog, "reglages-apprentissage.png")
-    settings_dialog.pages.setCurrentIndex(4)
-    settings_dialog.nav.button(4).setChecked(True)
+    settings_dialog.show_all_rules("learned")
+    save(settings_dialog, "reglages-toutes-regles.png")
+    show_settings_page("system")
     save(settings_dialog, "reglages-systeme.png")
+    show_settings_page("data")
+    save(settings_dialog, "reglages-donnees.png")
+    window.set_sidebar_collapsed(True)
+    window.show_page("bin")
+    save(window, "menu-replie.png")
+    window.set_sidebar_collapsed(False)
     wizard = OnboardingWizard(controller)
     wizard.resize(820, 640)
     save(wizard, "onboarding.png")

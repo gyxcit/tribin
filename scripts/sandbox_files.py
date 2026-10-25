@@ -133,17 +133,20 @@ def write_psd(path: Path, lines: list[str], color: str) -> None:
         path.write_bytes(b"8BPS\x00\x01" + b"\x00" * 20 + "\n".join(lines).encode("utf-8"))
 
 
-def write_docx(path: Path, title: str, paragraphs: list[str]) -> None:
+def write_docx(path: Path, title: str, paragraphs: list[str], created: str | None = None) -> None:
     from docx import Document
 
     doc = Document()
     doc.add_heading(title, level=1)
     for para in paragraphs:
         doc.add_paragraph(para)
+    if created:  # sinon python-docx laisse la date de son modèle (2013), que l'IA prendrait pour celle du document
+        doc.core_properties.created = datetime.strptime(created, "%Y-%m-%d")
+        doc.core_properties.modified = doc.core_properties.created
     doc.save(path)
 
 
-def write_xlsx(path: Path, sheets: dict[str, list[list]]) -> None:
+def write_xlsx(path: Path, sheets: dict[str, list[list]], created: str | None = None) -> None:
     from openpyxl import Workbook
 
     wb = Workbook()
@@ -152,10 +155,13 @@ def write_xlsx(path: Path, sheets: dict[str, list[list]]) -> None:
         ws = wb.create_sheet(name)
         for row in rows:
             ws.append(row)
+    if created:  # sinon openpyxl met la date du jour
+        wb.properties.created = datetime.strptime(created, "%Y-%m-%d")
+        wb.properties.modified = wb.properties.created
     wb.save(path)
 
 
-def write_pptx(path: Path, slides: list[tuple[str, str]]) -> None:
+def write_pptx(path: Path, slides: list[tuple[str, str]], created: str | None = None) -> None:
     from pptx import Presentation
 
     prs = Presentation()
@@ -163,6 +169,9 @@ def write_pptx(path: Path, slides: list[tuple[str, str]]) -> None:
         slide = prs.slides.add_slide(prs.slide_layouts[1])
         slide.shapes.title.text = title
         slide.placeholders[1].text = body
+    if created:  # sinon python-pptx laisse la date de son modèle
+        prs.core_properties.created = datetime.strptime(created, "%Y-%m-%d")
+        prs.core_properties.modified = prs.core_properties.created
     prs.save(path)
 
 
@@ -181,11 +190,12 @@ def write_file(path: Path, spec: dict) -> None:
     elif kind == "scan":
         write_scanned_pdf(path, lines)
     elif kind == "docx":
-        write_docx(path, spec.get("title", lines[0] if lines else ""), lines[1:] if "title" not in spec else lines)
+        write_docx(path, spec.get("title", lines[0] if lines else ""), lines[1:] if "title" not in spec else lines,
+                   spec.get("created", spec.get("mtime")))
     elif kind == "xlsx":
-        write_xlsx(path, spec["sheets"])
+        write_xlsx(path, spec["sheets"], spec.get("created", spec.get("mtime")))
     elif kind == "pptx":
-        write_pptx(path, spec["slides"])
+        write_pptx(path, spec["slides"], spec.get("created", spec.get("mtime")))
     elif kind == "image":
         write_image(path, lines, spec.get("color", "#d9534f"), tuple(spec.get("size", (800, 600))),
                     spec.get("camera"), spec.get("taken"))

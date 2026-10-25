@@ -238,7 +238,30 @@ def test_personal_mode_creates_missing_category(settings, sb):
     assert [i.file_id for i in report.done] == [item.file_id]
     assert (sb / "root" / "Animaux" / "2026-10-12_Vaccin-chat.pdf").exists()
     assert "Animaux" in load_convention(path).category_codes()  # ajoutée à la liste
-    assert "Mode : personnel" in llm.prompts[0] and "Clients" not in llm.prompts[0]
+    assert "Mode : Particulier" in llm.systems[0] and "Convention de rangement" in llm.systems[0]
+    assert "Clients (code" not in llm.systems[0] and "Projets existants" not in llm.prompts[0]
+
+
+def test_personal_mode_accepts_existing_folder_outside_categories(settings, sb):
+    """Cas « Stagio » : l'IA choisit « startup », dossier créé par l'utilisateur, hors de la liste des catégories."""
+    from tribin.convention.loader import load_convention
+
+    llm = fixed(category=None, target_folder="Startup", date="2026-10-12", description="Admin Stagio", confidence=0.85)
+    svc, path = personal_service(settings, sb, llm)
+    (sb / "root" / "startup").mkdir()  # créé après la convention : pas dans la liste des catégories
+    (sb / "root" / "startup" / "Presentation-projet-Stagio_2026-10-20.pdf").write_bytes(b"%PDF-1.4")
+    item = svc.analyze(svc.drop(sb / "inbox" / "scan0042.pdf").file_id)
+    p = item.proposal
+    assert not p.manual and p.target_folder == "startup" and not p.folder_is_new  # nom exact du dossier existant
+    assert p.new_category is None and "startup" not in [c.lower() for c in load_convention(path).category_codes()]
+    assert p.confidence == 0.85 and not any("gabarit" in w for w in p.warnings)
+
+    llm = fixed(category="Startup", target_folder="startup/Admin", description="Admin Stagio", confidence=0.85)
+    svc._provider_factory = lambda s, m=None: llm  # catégorie « Startup » inventée : le dossier existant prime
+    svc.update_config(svc.config)
+    p = svc.analyze(svc.drop(sb / "inbox" / "BC_4512.pdf").file_id).proposal
+    assert p.target_folder == "startup/Admin" and p.new_category is None
+    assert not any("gabarit" in w for w in p.warnings)
 
 
 def test_personal_mode_uses_existing_category_and_work_mode_never_invents(settings, sb):
@@ -330,3 +353,51 @@ def test_local_account(settings):
     saved = save_account(db, "Regis Likassi", "regis@exemple.fr")
     assert saved.initials == "RL" and get_account(db).email == "regis@exemple.fr"
     assert default_name("DOMAINE" + chr(92) + "jean.dupont") == "Jean Dupont"
+
+
+def test_folder_creation_permission(settings, sb):
+    """Réglages › Autorisations : par défaut oui en Particulier, non en Professionnel ; réglable."""
+    llm = fixed(category="Design", target_folder="Design/Sarah-Mbossa", description="Logos Sarah Mbossa",
+                confidence=0.9)
+    svc, _ = personal_service(settings, sb, llm)
+    assert svc.creates_folders() and AppConfig().creates_folders("work") is False
+    item = svc.analyze(svc.drop(sb / "inbox" / "scan0042.pdf").file_id)
+    assert "crée le bon dossier" in llm.systems[-1]
+    prepared = svc.prepare([Validation(item.file_id, item.proposal.target_folder, item.proposal.new_name, "accepted")])
+    assert not prepared.needs_confirmation  # autorisé : créés sans demander (annulables)
+
+    cfg = svc.config
+    cfg.auto_create_folders = False
+    svc.update_config(cfg)
+    assert not svc.creates_folders()
+    other = svc.analyze(svc.drop(sb / "inbox" / "BC_4512.pdf").file_id)
+    assert "Ne crée aucun dossier" in llm.systems[-1]
+    assert any("avec votre accord" in w for w in other.proposal.warnings)
+    prepared = svc.prepare([Validation(other.file_id, other.proposal.target_folder, other.proposal.new_name,
+                                       "accepted")])
+    assert prepared.needs_confirmation  # sans autorisation : la simulation est montrée avant de créer
+    assert other.file_id not in [i.file_id for i in svc.auto_file().done]
+
+
+def test_files_dropped_together_see_each_other(settings, sb):
+    """Une série (« … Sarah Mbossa-1 », « … Sarah Mbossa-2 ») : le second voit où l'IA a mis le premier."""
+    for n in (1, 2):
+        shutil.copy(sb / "inbox" / "scan0042.pdf", sb / "inbox" / f"Planche logos Sarah Mbossa-{n}.pdf")
+    llm = fixed(category="Design", target_folder="Design/Sarah-Mbossa", description="Logos Sarah Mbossa",
+                confidence=0.9)
+    svc, _ = personal_service(settings, sb, llm)
+    first = svc.drop(sb / "inbox" / "Planche logos Sarah Mbossa-1.pdf")
+    second = svc.drop(sb / "inbox" / "Planche logos Sarah Mbossa-2.pdf")
+    svc.analyze(first.file_id)
+    svc.analyze(second.file_id)
+    together = llm.prompts[-1].split("## Déposés en même temps")[1].split("##")[0]
+    assert "« Planche logos Sarah Mbossa-1.pdf » → Design/Sarah-Mbossa" in together
+
+
+def test_a_file_already_filed_is_not_filed_twice(settings, sb):
+    svc = service(settings, sb)
+    item = svc.analyze(svc.drop(sb / "inbox" / "scan0042.pdf").file_id)
+    v = Validation(item.file_id, item.proposal.target_folder, item.proposal.new_name, "accepted")
+    svc.commit(svc.prepare([v]))
+    with pytest.raises(BinError, match="vient déjà d'être rangé"):
+        svc.prepare([v])  # second appui sur Entrée pendant / après le rangement

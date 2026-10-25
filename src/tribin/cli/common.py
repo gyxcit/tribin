@@ -46,6 +46,12 @@ def print_proposal(original_name: str, p: Proposal) -> None:
     table.add_row("[bold]Nom[/bold]", p.new_name)
     table.add_row("[bold]Confiance[/bold]", confidence_label(p))
     table.add_row("[bold]Explication[/bold]", p.reasoning or "—")
+    if p.evidence:
+        table.add_row("[bold]Indices[/bold]", " · ".join(p.evidence))
+    if p.tool_calls:
+        from tribin.engine.tools import looked_at
+
+        table.add_row("[bold]Outils[/bold]", f"{len(p.tool_calls)} appel(s) ; a regardé : {', '.join(looked_at(p.tool_calls)) or '—'}")
     for w in p.warnings:
         table.add_row("[yellow]Attention[/yellow]", w)
     for i, alt in enumerate(p.alternatives, start=1):

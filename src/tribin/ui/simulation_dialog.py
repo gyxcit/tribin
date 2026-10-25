@@ -164,17 +164,20 @@ class SimulationDialog(QDialog):
         name.setFont(mono_font())
         name.setWordWrap(True)
         texts.addWidget(name)
+        for problem in problems:  # d'abord ce qui bloque, en clair
+            blocking = QLabel(problem)
+            blocking.setWordWrap(True)
+            blocking.setStyleSheet("color: #A42A25; font-weight: 600;")
+            texts.addWidget(blocking)
         details = []
         if op.source and op.action != "mkdir":
-            details.append("ancienne version" if op.meta.get("version_archive") else f"depuis {op.source.name}")
-        details += op.notes
-        details += problems
+            details.append("ancienne version" if op.meta.get("version_archive") else f"depuis « {op.source.name} »")
+        if not problems:  # un fichier introuvable ne sera pas renommé : la remarque sur le nom ne ferait qu'embrouiller
+            details += op.notes
         if details:
             info = QLabel(" · ".join(details))
             info.setObjectName("Muted")
             info.setWordWrap(True)
-            if problems:
-                info.setStyleSheet("color: #A42A25;")
             texts.addWidget(info)
         line.addLayout(texts, 1)
         return row

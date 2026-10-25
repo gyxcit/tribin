@@ -50,7 +50,8 @@ def controller(qapp, settings, sandbox_dir, monkeypatch):
     shutil.copytree(sandbox_dir, sb)
     monkeypatch.setattr(app_mod, "is_being_written", lambda path, delay=2.0: False)
     llm = fixed(target_folder=f"{NOEL}/06_Admin", date="2026-10-12", description="Devis impression", confidence=0.9,
-                reasoning="Devis de l'imprimeur")
+                reasoning="Devis de l'imprimeur", evidence=["en-tête DEVIS", "projet 2026-042"])
+    llm.tool_script = [("lister_dossiers", {"chemin": ""})]
     svc = BinService(settings, provider_factory=lambda s, m=None: llm)
     svc.update_config(AppConfig(roots=[str(sb / "root")], convention_path=str(sb / "convention.yaml"),
                                 onboarding_done=True, privacy_accepted=True))
@@ -86,6 +87,7 @@ def test_drop_shows_proposal_in_bin_window(qapp, controller):
     assert win.detail.name.text() == "2026-10-12_ACME_2026-042_Devis-impression.pdf"
     assert win.detail.folder == f"{NOEL}/06_Admin"
     assert "Devis de l'imprimeur" in win.detail.reasoning.text()
+    assert win.detail.evidence.text() == "Indices : en-tête DEVIS · projet 2026-042\nL'IA a regardé : racine"
     assert win.detail.pill.text() == "Sûr · 90 %"
     assert win.detail.original.text() == "scan0042.pdf"
     assert "1 fichier" in controller.tray.toolTip() and win.pending_count.text() == "1"
@@ -135,6 +137,28 @@ def test_category_in_one_click(qapp, controller):
     assert validation.target_folder == f"{NOEL}/01_Brief" and validation.decision == "edited"
 
 
+def test_category_menu_in_personal_mode(qapp, controller):
+    """Mode personnel : la catégorie est le premier niveau ; sans dossier, elle se choisit quand même."""
+    from tribin.service.conventions import create_convention
+
+    svc = controller.service
+    cfg = svc.config
+    cfg.convention_path = str(create_convention("personal", cfg.roots, svc.settings.data_dir)[0])
+    svc.update_config(cfg)
+    detail = controller.bin_window.detail
+    controller.drop_paths([controller.sb / "inbox" / "scan0042.pdf"])
+    assert wait(qapp, lambda: ready_items(controller, 1))
+    controller.refresh_queue()
+    item = controller.bin_window.current_item()
+    win = controller.bin_window
+    detail.show_item(item, item.proposal.new_name, "Etudes/CV", categories=win._categories(), personal=True)
+    assert detail.category.currentData() == "Etudes" and detail.category.isEnabled()  # premier niveau
+    detail.show_item(item, item.proposal.new_name, "", categories=win._categories(), personal=True)
+    assert detail.category.currentIndex() == -1 and detail.category.isEnabled()  # aucun dossier : à choisir
+    detail.category.activated.emit(detail.category.findData("Banque"))
+    assert detail.folder == "Banque"
+
+
 def test_queue_restored_after_restart(qapp, controller, settings):
     controller.drop_paths([controller.sb / "inbox" / "notes.txt"])
     assert wait(qapp, lambda: ready_items(controller, 1))
@@ -174,6 +198,9 @@ def test_batch_shows_simulation_then_history_and_undo(qapp, controller, monkeypa
     placed = controller.sb / "root" / NOEL / "06_Admin" / "2026-10-12_ACME_2026-042_Devis-impression.pdf"
     assert not placed.exists()
     assert any(w.text() == "Annulé" for w in history.findChildren(QLabel))
+    back = controller.service.pending()  # revenus dans « À ranger », avec leur proposition (pas cachés)
+    assert len(back) == 2 and all(i.status == "ready" and i.proposal for i in back)
+    assert controller.service.requeue_returned() == [] and len(controller.service.pending()) == 2  # pas en double
 
 
 def test_simulation_dialog_blocks_on_problem(qapp, controller):
@@ -242,6 +269,12 @@ def test_empty_state_edits_and_search(qapp, controller):
     win.queue.search.clear()
     win.queue.set_tab("check")
     assert win.queue.order == []  # les deux fichiers sont prêts : rien à vérifier
+    assert win.queue.empty.isVisibleTo(win.queue) and "Rien à vérifier" in win.queue.empty.text()
+    assert not win.queue.list.isVisibleTo(win.queue) and win.detail_pages.currentIndex() == 0  # la liste reste à gauche
+    assert "Aucun fichier dans cet onglet" in win.detail_placeholder.text()
+    win.queue.set_tab("ready")
+    assert len(win.queue.order) == 2 and win.detail_pages.currentIndex() == 1 and not win.queue.empty.isVisibleTo(win.queue)
+    win.queue.set_tab("check")
     win.select_file(first.file_id)  # sélectionner un fichier masqué revient à « Tous »
     assert win.queue.tab == "all" and win.queue.current_file_id() == first.file_id
 
@@ -475,7 +508,9 @@ def test_personal_mode_in_onboarding_and_settings(qapp, controller, monkeypatch)
     dialog = SettingsDialog(controller)
     controller.extra.append(dialog)
     assert dialog.mode() == "personal"
+    assert dialog.convention_row.isHidden()  # Particulier : TriBin gère seul sa convention
     dialog.mode_cards["work"].radio.setChecked(True)
+    assert not dialog.convention_row.isHidden()  # Professionnel : « Convention de l'équipe »
     assert dialog.roots.values() == []  # le mode Travail a ses propres dossiers (aucun pour l'instant)
     dialog._save()  # refusé : aucun dossier pour le mode Travail
     assert controller.service.convention().personal
@@ -726,5 +761,86 @@ def test_rules_editor_list_and_text_views(qapp, controller, monkeypatch):
     assert rows[0].details.isVisibleTo(rows[0])
     rows[0].switch.click()  # interrupteur : règle mise de côté
     assert not list_rules(controller.service.db)[-1].enabled
-    editor.show_view(1)  # vue texte
-    assert "# [ajoutée] Les factures" in editor.text.toPlainText()
+
+
+def test_rules_preview_and_all_rules_page(qapp, controller, monkeypatch):
+    from tribin.learning.rules_store import add_rule
+    from tribin.ui.rules_view import PREVIEW, RuleRow
+    from tribin.ui.settings import PAGES, SettingsDialog
+
+    db = controller.service.db
+    for n in range(5):
+        add_rule(db, f"Règle numéro {n} pour l'électricité" if n == 4 else f"Règle numéro {n}", "manual")
+    dialog = SettingsDialog(controller)
+    controller.extra.append(dialog)
+    preview = [r for r in dialog.rules.findChildren(RuleRow) if r.isVisibleTo(dialog.rules)]
+    assert len(preview) == PREVIEW and preview[0].rule.text.startswith("Règle numéro 4")  # les plus récentes
+    more = [b for b in dialog.rules.findChildren(QPushButton) if b.text() == "Voir tout (5)"]
+    assert len(more) == 1
+    more[0].click()  # page « Toutes les règles », sur « Ajoutées »
+    browser = dialog.rules_browser
+    assert dialog.pages.currentIndex() == len(PAGES) and browser.kind == "manual"
+    assert browser.segment_buttons["manual"].text() == "Ajoutées · 5"
+    rows = [r for r in browser.findChildren(RuleRow) if r.isVisibleTo(browser)]
+    assert len(rows) == 5
+    browser.search.setText("electricite")  # sans accent : trouve « électricité »
+    browser.reload()
+    rows = [r for r in browser.findChildren(RuleRow) if r.isVisibleTo(browser)]
+    assert len(rows) == 1 and browser.segment_buttons["manual"].text() == "Ajoutées · 1"
+    browser.show_view(1)  # vue texte
+    assert "[ajoutée] Règle numéro 0" in browser.text.toPlainText()
+    dialog._back_to_learning()
+    assert PAGES[dialog.pages.currentIndex()][0] == "learning"
+
+
+def test_settings_data_page_has_journal(qapp, controller):
+    from tribin.ui.settings import PAGES, SettingsDialog
+
+    dialog = SettingsDialog(controller)
+    controller.extra.append(dialog)
+    keys = [key for key, *_ in PAGES]
+    system = dialog.pages.widget(keys.index("system"))
+    data = dialog.pages.widget(keys.index("data"))
+    journal = str(controller.service.settings.journal_dir)
+    assert journal not in [w.text() for w in system.findChildren(QLabel)]
+    assert journal in [w.text() for w in data.findChildren(QLabel)]
+
+
+def test_sidebar_collapses_from_logo_and_remembers(qapp, controller):
+    from tribin.ui.bin_window import SIDEBAR_COLLAPSED, SIDEBAR_WIDTH
+
+    window = controller.bin_window
+    assert not window.sidebar_collapsed and window.sidebar.maximumWidth() == SIDEBAR_WIDTH
+    window.brand.clicked.emit()  # clic sur le logo
+    assert window.sidebar_collapsed and window.sidebar.maximumWidth() == SIDEBAR_COLLAPSED
+    assert window.nav_buttons["home"].text() == "" and window.nav_buttons["home"].toolTip() == "Accueil"
+    assert not window.account_chip.name.isVisibleTo(window.account_chip)
+    assert controller.service.config.sidebar_collapsed  # gardé pour la prochaine ouverture
+    window.brand.clicked.emit()
+    assert window.nav_buttons["home"].text() == "Accueil" and not controller.service.config.sidebar_collapsed
+
+
+def test_permissions_page_and_no_double_filing(qapp, controller):
+    from tribin.ui.settings import PAGES, SettingsDialog
+
+    assert [key for key, *_ in PAGES][2] == "permissions"
+    dialog = SettingsDialog(controller)
+    controller.extra.append(dialog)
+    assert not dialog.create_folders.isChecked()  # mode Professionnel : avec votre accord, par défaut
+    assert controller.service.config.auto_create_folders is None
+    dialog.create_folders.click()
+    assert dialog.create_folders_state.text() == "Autorisé"
+    dialog._save()
+    assert controller.service.config.auto_create_folders is True and controller.service.creates_folders()
+
+    controller.drop_paths([controller.sb / "inbox" / "scan0042.pdf"])
+    assert wait(qapp, lambda: ready_items(controller, 1))
+    controller.refresh_queue()
+    win = controller.bin_window
+    win.validate_selected()
+    win.validate_selected()  # Entrée appuyée deux fois pendant le rangement
+    assert wait(qapp, lambda: not controller.service.pending())
+    assert wait(qapp, lambda: not controller._filing)
+    moves = [o for o in controller.service.executor().journal.states().values()
+             if o.get("action") == "move" and o.get("status") == "done"]
+    assert len(moves) == 1

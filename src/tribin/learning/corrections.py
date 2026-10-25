@@ -19,10 +19,12 @@ from rapidfuzz import fuzz
 from tribin.convention.loader import Convention
 from tribin.convention.naming import split_extension, split_template
 from tribin.convention.structure import fields_from_folder, matches_template
+from tribin.engine.similar import distinctive_words
 from tribin.db import Database
 from tribin.models import FileInfo, Proposal
 
 MAX_EXAMPLES = 5
+MIN_NAME_SIMILARITY = 55  # en dessous, sans mot distinctif commun, une correction n'est pas un exemple
 TEAM_RULE_ALERT = 3
 LEARNABLE = ("edited", "alternative_chosen")
 
@@ -114,8 +116,10 @@ def changed_fields(proposal: Proposal, final_folder: str, final_name: str, conve
 def record_correction(db: Database, convention: Convention, original_name: str, excerpt: str, client_hint: str | None,
                       proposal: Proposal, final_folder: str, final_name: str, decision: str,
                       source: str = "explicit") -> list[str]:
-    """Enregistre une validation. Renvoie les règles d'équipe contredites (vide si conforme)."""
-    broken = contradicts_team(final_folder, final_name, convention) if decision in LEARNABLE else []
+    """Enregistre une validation. Renvoie les règles d'équipe contredites (vide si conforme ; toujours vide en mode
+    personnel : pas d'équipe, un dossier hors des catégories est un choix comme un autre)."""
+    check_team = decision in LEARNABLE and not convention.personal
+    broken = contradicts_team(final_folder, final_name, convention) if check_team else []
     with db.tx() as c:
         c.execute(
             "INSERT INTO corrections(ts, original_name, extension, excerpt, client_hint, ai_folder, ai_name, final_folder, "
@@ -150,18 +154,31 @@ def team_rule_alerts(db: Database) -> list[str]:
 # --- récupération des exemples ---------------------------------------------------------------
 
 
-def similar_examples(db: Database, info: FileInfo, client_hint: str | None, limit: int = MAX_EXAMPLES) -> list[str]:
-    """Jusqu'à 5 corrections récentes les plus similaires (même type, même client, nom proche)."""
+def usable(corr: Correction, personal: bool = False) -> bool:
+    """Correction dont on peut apprendre. Celles qui contredisent la convention d'équipe sont écartées, sauf en mode
+    personnel (y compris celles enregistrées avant que ce mode ne les accepte)."""
+    return corr.decision in LEARNABLE and (personal or not corr.contradicts_team)
+
+
+def similar_examples(db: Database, info: FileInfo, client_hint: str | None, limit: int = MAX_EXAMPLES,
+                     personal: bool = False) -> list[str]:
+    """Jusqu'à 5 corrections récentes dont le nom ressemble vraiment à celui-ci (similarité ≥ 55 ou mot distinctif
+    commun) ; même extension et même client ne font que départager. Une correction sur un CV ne sert jamais
+    d'exemple pour un relevé bancaire parce que les deux sont des PDF."""
     stem = split_extension(info.name)[0].lower()
+    words = distinctive_words(info.name)
     scored = []
     for corr in list_corrections(db, 300):
-        if corr.decision not in LEARNABLE or corr.contradicts_team:
+        if not usable(corr, personal):
             continue
-        score = fuzz.token_set_ratio(stem, split_extension(corr.original_name)[0].lower()) * 0.4
-        score += 30 if corr.extension == info.extension else 0
-        score += 30 if client_hint and corr.client_hint == client_hint else 0
-        if score >= 40:
-            scored.append((score, -corr.id, corr))
+        name_score = fuzz.token_set_ratio(stem, split_extension(corr.original_name)[0].lower())
+        shared = words & distinctive_words(corr.original_name)
+        if name_score < MIN_NAME_SIMILARITY and not shared:
+            continue
+        score = name_score + 20 * bool(shared)
+        score += 10 if corr.extension == info.extension else 0
+        score += 10 if client_hint and corr.client_hint == client_hint else 0
+        scored.append((score, -corr.id, corr))
     scored.sort(key=lambda t: (-t[0], t[1]))
     return [format_example(c) for _, _, c in scored[:limit]]
 

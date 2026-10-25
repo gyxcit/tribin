@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import threading
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -10,15 +11,16 @@ from pathlib import Path
 from tribin.config import STAGING_DIRNAME, Settings, is_within, read_api_key
 from tribin.convention.loader import Convention, ConventionError, load_convention
 from tribin.db import Database
-from tribin.convention.naming import fit_to_path
-from tribin.convention.structure import matches_template, personal_folder_ok
+from tribin.convention.naming import fit_to_path, split_extension
 from tribin.engine.context import folder_signature, make_context
 from tribin.engine.proposer import ProposeContext, has_placeholder, propose
+from tribin.engine.similar import MIN_WORD, distinctive_words
 from tribin.extract import extract
 from tribin.fs.filters import ExclusionMatcher, NotProcessable, check_processable
 from tribin.ids import new_id
 from tribin.llm import make_provider
 from tribin.learning.corrections import record_correction
+from tribin.learning.rules_store import refresh_confirmed_rules
 from tribin.learning.signals import check_moved_files, maybe_summarize, remember_placement
 from tribin.llm.base import LLMError, Usage
 from tribin.safety import restore
@@ -41,7 +43,7 @@ class _NoLLM:
     def __init__(self, reason: str, model: str):
         self.reason, self.model, self.last_usage = reason, model, Usage()
 
-    def complete_json(self, system, user, schema, images=None):
+    def complete_json(self, system, user, schema, images=None, tools=None, call_tool=None):
         raise LLMError(self.reason)
 
 
@@ -58,8 +60,8 @@ class Prepared:
     batch: Batch
     report: SimulationReport
     validations: list[Validation]
-    # Mode personnel : dossiers conformes au gabarit (« Sante/2026 », nouvelle catégorie comprise), créés sans
-    # demander (choix de l'utilisateur) ; toujours journalisés et annulables.
+    # Dossiers que l'utilisateur autorise TriBin à créer sans demander (Réglages › Autorisations) ; toujours
+    # journalisés et annulables.
     new_category_folders: frozenset[Path] = frozenset()
 
     @property
@@ -108,12 +110,23 @@ class BinService:
         self._contexts: dict[str, tuple[tuple, ProposeContext]] = {}  # racine -> (signature des dossiers, contexte)
         self._convention: tuple[str, float, Convention] | None = None
         self._lock = threading.RLock()
+        # Fichiers qui se ressemblent (un mot distinctif commun) : analysés l'un après l'autre, pour que chacun voie
+        # où l'IA a proposé de ranger les précédents et que la série aille au même endroit.
+        self._word_locks: dict[str, threading.Lock] = {}
 
     # --- réglages -----------------------------------------------------------------------------
 
     @property
     def config(self) -> AppConfig:
         return load_config(self.db)
+
+    def creates_folders(self) -> bool:
+        """Autorisation « Créer des dossiers » : choix de l'utilisateur, sinon oui en Particulier, non en Professionnel."""
+        try:
+            personal = self.convention().personal
+        except BinError:
+            personal = False
+        return self.config.creates_folders("personal" if personal else "work")
 
     def update_config(self, config: AppConfig) -> None:
         save_config(self.db, config)
@@ -183,7 +196,9 @@ class BinService:
                     llm = self._provider_factory(settings, self.config.model or None)
                 except LLMError as exc:
                     llm = _NoLLM(str(exc), settings.model)
-                cached = (signature, make_context(Path(root), self.convention(), llm, self.settings, self.db))
+                ctx = make_context(Path(root), self.convention(), llm, self.settings, self.db)
+                ctx.create_folders = self.creates_folders()
+                cached = (signature, ctx)
                 self._contexts[key] = cached
             return cached[1]
 
@@ -227,14 +242,40 @@ class BinService:
             self.queue.upsert(item)
             log.info("staged file missing, removed from queue: %s", staged)
             return item
+        words = sorted(w for w in distinctive_words(Path(item.original_path).name) if len(w) >= MIN_WORD)
+        with self._lock:
+            locks = [self._word_locks.setdefault(w, threading.Lock()) for w in words]
+        for lock in locks:  # toujours dans le même ordre (alphabétique) : pas d'interblocage
+            lock.acquire()
         try:
-            proposal = propose(extract(staged), self.context(Path(item.root)))
+            info = extract(staged)
+            # Le fichier est lu dans le dossier tampon : l'IA doit voir son vrai nom (sans suffixe « _2 ») et son vrai
+            # dossier d'origine (Téléchargements, Clients/ACME…), pas « _TriBin/a_trier ».
+            original = Path(item.original_path)
+            info.name, info.extension = original.name, split_extension(original.name)[1].lower()
+            info.origin_folder = str(original.parent)
+            proposal = propose(info, self.context(Path(item.root)), self._dropped_together(item, set(words)))
             proposal.file_id = item.file_id
             item.proposal, item.status, item.error = proposal, "ready", None
         except BinError as exc:
             item.status, item.error = "error", str(exc)
+        finally:
+            for lock in reversed(locks):
+                lock.release()
         self.queue.upsert(item)
         return item
+
+    def _dropped_together(self, item: QueueItem, words: set[str]) -> list[str]:
+        """Fichiers en attente, déjà analysés, qui partagent un mot distinctif avec celui-ci, et leur dossier proposé."""
+        lines = []
+        for other in self.queue.active():
+            p = other.proposal
+            if other.file_id == item.file_id or other.status != "ready" or not p or p.manual or not p.target_folder:
+                continue
+            name = Path(other.original_path).name
+            if words & distinctive_words(name):
+                lines.append(f"« {name} » → {p.target_folder}")
+        return lines[:8]
 
     def pending(self) -> list[QueueItem]:
         return self.queue.active()
@@ -283,6 +324,22 @@ class BinService:
 
     def set_aside_items(self) -> list[QueueItem]:
         return self.queue.skipped()
+
+    def requeue_returned(self) -> list[str]:
+        """Fichiers « rangés » revenus dans le dossier tampon (rangement annulé depuis l'Historique) : de nouveau
+        « à ranger », au lieu de rester cachés dans le dossier interne. Renvoie les fichiers à réanalyser."""
+        to_analyze = []
+        listed = {os.path.normcase(i.staged_path) for i in [*self.queue.active(), *self.queue.skipped()]}
+        for row in self.db.query("SELECT file_id, staged_path FROM queue WHERE status='done'"):
+            if os.path.normcase(row["staged_path"]) in listed or not Path(row["staged_path"]).is_file():
+                continue  # déjà dans la liste (déposé de nouveau), ou bien rangé : plus dans le dossier tampon
+            listed.add(os.path.normcase(row["staged_path"]))
+            item = self.queue.get(row["file_id"])
+            status = "ready" if item and item.proposal else "analyzing"
+            self.queue.set_status(row["file_id"], status)
+            if status == "analyzing":
+                to_analyze.append(row["file_id"])
+        return to_analyze
 
     def rebuild_pending_names(self) -> int:
         """Nommage modifié dans les réglages : les noms proposés des fichiers en attente sont recalculés
@@ -334,6 +391,8 @@ class BinService:
             item = self.queue.get(v.file_id)
             if item is None or not item.proposal:
                 raise BinError("Proposition introuvable pour ce fichier.")
+            if item.status == "done":
+                raise BinError(f"« {Path(item.original_path).name} » vient déjà d'être rangé : voyez l'Historique.")
             p = item.proposal
             meta = {
                 "file_id": v.file_id, "decision": v.decision, "prompt_version": p.prompt_version, "model": p.model,
@@ -342,10 +401,7 @@ class BinService:
             }
             archive_older_versions(batch, p, Path(item.root), v.target_folder, self.convention(), v.file_id)
             batch.move(Choice(Path(item.staged_path), Path(item.root), v.target_folder, v.new_name, meta))
-            convention = self.convention()
-            if convention.personal and ((p.new_category and v.target_folder.split("/")[0] == p.new_category)
-                                        or matches_template(v.target_folder, convention)
-                                        or personal_folder_ok(v.target_folder, convention)):
+            if self.creates_folders():  # autorisation : dossiers et sous-dossiers créés sans demander (annulables)
                 parts = v.target_folder.split("/")
                 trusted |= {Path(item.root).joinpath(*parts[:i]) for i in range(1, len(parts) + 1)}
         return Prepared(batch, executor.simulate(batch.ops), validations, frozenset(trusted))
@@ -385,6 +441,9 @@ class BinService:
                     continue
                 if p.confidence < min_confidence:
                     report.left.append((item, "confiance trop faible"))
+                    continue
+                if p.hesitant:
+                    report.left.append((item, "l'IA hésite entre deux dossiers"))
                     continue
                 try:
                     prepared = self.prepare([Validation(item.file_id, p.target_folder, p.new_name, "auto")])
@@ -433,8 +492,10 @@ class BinService:
                               item.proposal, v.target_folder, op.destination.name, v.decision)
             remember_placement(self.db, op.operation_id, op.destination, Path(item.root), v.target_folder,
                                op.destination.name, original, item.proposal.client_hint)
-            if v.decision not in ("accepted", "auto"):
-                maybe_summarize(self.db, self.context(Path(item.root)).llm)
+            if v.decision == "accepted":
+                refresh_confirmed_rules(self.db)  # même modèle de nom validé plusieurs fois : règle confirmée
+            elif v.decision != "auto":
+                maybe_summarize(self.db, self.context(Path(item.root)).llm, personal=convention.personal)
         except Exception:
             log.exception("learning hook failed")
 

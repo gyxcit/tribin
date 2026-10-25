@@ -28,3 +28,23 @@ def test_eval_with_oracle_scores_100_and_writes_nothing(sandbox_dir: Path, tmp_p
     assert m["categories_correctes_pct"] == 100.0
     out = save_report(report, tmp_path / "eval_results")
     assert out.exists() and f"fake-model_{PROMPT_VERSION}" in out.name
+
+
+def test_personal_testset_with_oracle(tmp_path: Path):
+    """Jeu Particulier : avec une IA parfaite, 100 % de dossiers exacts, y compris le dossier « Design/… » à créer."""
+    from make_sandbox_perso import make_sandbox_perso
+
+    sb = tmp_path / "perso"
+    make_sandbox_perso(sb)
+    before = _snapshot(sb)
+    llm = oracle(sb)
+    report = run_eval(sb, lambda root, conv: ProposeContext(root=root, convention=conv, llm=llm))
+    assert _snapshot(sb) == before
+    m = report.metrics
+    assert m["fichiers"] == 27 and m["dossiers_exacts_pct"] == 100.0 and m["a_traiter_manuellement"] == 0
+    assert report.prompt_version == "p9-perso" and m["erreurs_confiantes"] == 0
+    rows = {r.file: r for r in report.rows}
+    logo = rows["Planche de logos Sarah Mbossa-1.png"].proposal
+    assert logo.folder_is_new and logo.new_category is None and logo.target_folder == "Graphisme/Sarah-Mbossa"
+    assert m["jetons_entree_par_fichier"] == 100 and m["part_lue_depuis_le_cache_pct"] == 0.0
+    assert m["appels_outil_par_fichier"] == 0.0 and m["dossiers_crees_en_double"] == 0

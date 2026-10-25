@@ -62,16 +62,30 @@ class Proposal(BaseModel):
     model: str
     manual: bool = False  # True : échec de l'IA, « à traiter manuellement »
     new_category: str | None = None  # mode personnel : catégorie créée pour ce fichier (dossier à créer)
+    # Analyse de l'IA avant sa décision (skill v2) : nature, sujet, origine de la date, indices (affichés « Indices : … »)
+    document_kind: str | None = None
+    subject: str | None = None
+    document_date_source: str | None = None  # « contenu », « nom » ou « aucune »
+    evidence: list[str] = Field(default_factory=list)
+    tool_calls: list[dict] = Field(default_factory=list)  # appels d'outil (« L'IA a regardé : racine, Etudes »)
     client_hint: str | None = None
     excerpt: str = ""  # début du contenu extrait (apprentissage)
     older_versions: list[str] = Field(default_factory=list)  # versions précédentes à ranger dans _versions/
     cost_usd: float = 0.0
     duration_s: float = 0.0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cached_input_tokens: int = 0  # jetons d'entrée lus depuis le cache de prompt (si le fournisseur le dit)
+
+    @property
+    def hesitant(self) -> bool:
+        """L'IA envisage une autre destination : un humain tranche, quelle que soit sa confiance."""
+        return bool(self.alternatives)
 
     @property
     def needs_review(self) -> bool:
-        """« À vérifier » si la confiance est faible ou si la proposition est manuelle."""
-        return self.manual or self.confidence < LOW_CONFIDENCE
+        """« À vérifier » si la confiance est faible, si l'IA hésite ou si la proposition est manuelle."""
+        return self.manual or self.hesitant or self.confidence < LOW_CONFIDENCE
 
 
 # --- Réponse attendue de l'IA (section 8) ---------------------------------------------------
@@ -85,8 +99,15 @@ class LLMAlternative(BaseModel):
 
 
 class LLMProposal(BaseModel):
-    """Objet JSON renvoyé par le modèle. Le nom final est construit par le code, jamais par l'IA."""
+    """Objet JSON renvoyé par le modèle. Le nom final est construit par le code, jamais par l'IA.
 
+    Les quatre premiers champs (analyse avant décision, skill v2) sont facultatifs : les réponses de l'ancien prompt
+    restent valides."""
+
+    document_kind: str | None = None
+    subject: str | None = None
+    document_date_source: str | None = None
+    evidence: list[str] = Field(default_factory=list)
     client: str | None = None
     project_code: str | None = None
     project_name: str | None = None

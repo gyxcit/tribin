@@ -348,7 +348,11 @@ versions:
 `extract(path) -> FileInfo` (modèle pydantic) :
 
 - **toujours** : nom, extension, taille, dates de création et de modification, dossier d'origine, type MIME ;
-- **texte** (`.txt`, `.md`, `.csv`) : 4 000 premiers caractères ;
+- **texte** (`.txt`, `.md`, `.csv`, `.tsv`, `.log`, `.srt`, `.ics`, `.vcf`, configuration `.yaml` `.toml` `.ini`, code source) : 4 000 premiers caractères, mots de passe, jetons et clés privées masqués avant l'envoi ; jamais lus : `.env`, `.pem`, `.p12`, `.kdbx`… ;
+- **pages web** (`.html`, `.htm`, `.mht`, `.mhtml`) : titre, description, intertitres et texte visible, sans scripts ni styles ; page construite en JavaScript (texte visible quasi vide) : contenu lu dans ses blocs de données (gabarit HTML, JSON) ;
+- **données** (`.xml`, `.svg`, `.json`, `.ipynb`, `.webloc`) : textes du document, paires clé : valeur, cellules du carnet, adresse du lien ;
+- **autres documents** : OpenDocument (`.odt`, `.ods`, `.odp`), `.rtf`, `.epub`, e-mails `.eml` (objet, expéditeur, date, corps, pièces jointes), Apple iWork (`.pages`, `.numbers`, `.key` : aperçu PDF intégré, sinon vignette ; un `.key` qui n'est pas une archive n'est jamais lu), anciens Word / Excel / PowerPoint (`.doc`, `.xls`, `.ppt` : lecture approximative du texte) ;
+- **archives** (`.zip`, `.tar`, `.tar.gz`…) : nombre de fichiers et leurs noms, sans rien décompresser ;
 - **PDF** : texte des 3 premières pages (4 000 caractères max). Si aucun texte (document scanné) : rendu de la première page en image avec `pypdfium2` (1024 px max), envoyée à l'IA pour analyse visuelle ;
 - **Word / Excel / PowerPoint** : texte principal ; noms des feuilles et premières cellules ; titres des diapositives (4 000 caractères max) ;
 - **images** (`jpg`, `png`, `tif`, `webp`, `heic` si possible) : métadonnées EXIF + miniature 1024 px envoyée à l'IA ;
@@ -562,64 +566,31 @@ L'application utilise ce même module pour sa fonction « Annuler ».
 
 ## 8. Prompt du moteur de proposition
 
-À placer dans `engine/prompts.py`, avec une constante `PROMPT_VERSION` (à incrémenter à chaque modification et inscrite dans le journal). Les blocs `{{...}}` sont remplis par le code ; une section vide est omise.
+Dans `engine/prompts.py`, avec `PROMPT_VERSION` (Professionnel : « p8 ») et `PERSONAL_PROMPT_VERSION` (Particulier : « p9-perso »), inscrites dans le journal et incrémentées à chaque modification. Le diagnostic, l'architecture et le texte complet des consignes (« skill de triage v2 ») sont dans [docs/triage-skill-v2.md](docs/triage-skill-v2.md). L'ancien prompt (p7 / p8-perso) reste dans `engine/prompts_legacy.py` pour la comparaison (`tribin eval --prompt p7`).
 
-```text
-[SYSTEM]
-Tu es l'assistant de rangement de fichiers d'une équipe. Ta mission : proposer
-le dossier où ranger un fichier et les éléments de son nouveau nom, en respectant
-STRICTEMENT la convention d'équipe fournie.
+**Deux prompts complets, un cœur commun.** Le cœur donne le rôle (l'archiviste qui connaît la personne), la méthode dans l'ordre (observer le contenu puis le nom, le type, l'origine → situer parmi l'existant par force décroissante : règle ou correction › même modèle de nom › série déposée ensemble › dossier du même sujet › catégorie par nature → décider → nommer → évaluer et expliquer), les interdits, un barème de confiance ancré sur des faits observables, le format de réponse et trois exemples (contenu lisible et destination confirmée ; image sans texte ; série en mode Particulier). Puis un bloc **Particulier** (ni client ni projet ; catégorie selon la nature du document ; dossiers créés par l'utilisateur hors de la liste aussi valables qu'une catégorie ; sous-dossiers limités à la profondeur réglée) ou **Professionnel** (gabarit de structure, codes clients, projets existants, conflit correction / convention signalé) avec la règle de création de dossiers selon Réglages › Autorisations.
 
-Règles :
-- Choisis de préférence un dossier existant parmi les candidats fournis.
-- Ne propose un nouveau dossier que s'il suit le gabarit de structure de la
-  convention ; indique alors folder_is_new = true.
-- Le client doit être un code de la liste des clients. S'il est inconnu, mets
-  client = null et explique-le dans reasoning.
-- N'invente aucune information absente du fichier. Si la date du document
-  n'est pas identifiable, mets date = null.
-- description : 2 à 5 mots, précis et utiles pour retrouver le fichier
-  (ex. "Devis impression affiches"), sans répéter le client, la date ni la version.
-- Les exemples de corrections montrent les préférences de cet utilisateur :
-  suis-les, sauf s'ils contredisent la convention d'équipe.
-- confidence : ta certitude réelle, entre 0 et 1. Sois honnête : 0.5 si tu hésites.
-- Réponds UNIQUEMENT avec un objet JSON valide, sans aucun texte autour.
+**Un préfixe stable, un message par fichier (cache de prompt).**
 
-[USER]
-## Profil de l'utilisateur
-{{profile}}
+| Bloc | Contenu | Change quand | Message |
+|---|---|---|---|
+| Skill | cœur, bloc du mode, autorisation « Créer des dossiers », format, exemples | version de TriBin, réglage | `system` |
+| Contexte de rangement | « Convention de rangement » (Particulier) ou « Convention d'équipe » (Professionnel) : mode, structure, catégories décrites, clients, gabarit du nom ; profil de l'utilisateur ; règles de cet utilisateur | réglages, nouvelle règle | `system`, à la suite |
+| Fichier | dossiers candidats (15, avec description), projets existants (Professionnel), fichiers déjà rangés qui ressemblent à celui-ci, déposés en même temps déjà analysés, corrections passées semblables, indice client (Professionnel), le fichier : nom d'origine, type, taille, dates du fichier (« pas du document »), dossier d'origine, métadonnées, contenu extrait, image jointe | à chaque fichier | `user` |
+| Arborescence | lue à la demande par l'outil `lister_dossiers` (ci-dessous), jamais collée dans le prompt | — | appels d'outil |
 
-## Convention d'équipe
-Structure : {{structure_template}}
-Format des projets : {{project_format}}
-Catégories : {{categories_with_descriptions}}
-Clients (code : nom, alias) : {{clients_list}}
+**Un outil pour lire l'arborescence : `lister_dossiers`** (`engine/tools.py`). L'IA reçoit une déclaration de fonction (`chemin` relatif à la racine, `""` pour la racine ; `profondeur` 1 ou 2) et l'appelle quand elle en a besoin : quand aucun candidat ne traite du même sujet, pour voir les sous-dossiers d'une catégorie, et toujours avant de proposer `folder_is_new = true` (le dossier existe peut-être sous un autre nom : « Design » contre « Graphisme »). La réponse est compacte et triée (`chemin`, `fichiers_ici`, `exemples`, `dossiers[{nom, fichiers, sous_dossiers, exemples}]`, `tronque`), bâtie sur les profils de dossiers déjà en mémoire (`os.scandir` seulement pour un dossier absent des profils). Limites : 3 appels par fichier tous outils confondus (le 4ᵉ répond « budget épuisé », puis les outils ne sont plus proposés), 60 dossiers par réponse, 3 exemples par dossier (5 pour le dossier demandé) ; `_TriBin`, `_Archive`, `_versions`, dossiers cachés et zones exclues jamais listés ; un chemin hors de la racine (`..`, absolu) reçoit une erreur lisible. Le registre (`Tool`, `ToolSession`) est générique : un outil suivant (`lire_plus`, `chercher_ranges`) s'ajoute sans toucher au prompt. Les trois fournisseurs bouclent (réponse → appel → résultat → nouvelle réponse) : Anthropic avec `tools` et des blocs `tool_use` / `tool_result` via `messages.create` ; Mistral avec `tools` de type `function`, `tool_choice` auto puis none, messages `role = tool`, sans `response_format` pendant la boucle ; Gemini avec des `function_declarations` et des parts `function_call` / `function_response`, sans `response_mime_type` JSON pendant la boucle. Chaque appel est journalisé dans `Proposal.tool_calls`, affiché dans le détail (« L'IA a regardé : racine, Etudes ») et compté par `tribin eval`. L'ancien prompt p7 ne reçoit pas les outils. Règle « pousser ou laisser chercher » et feuille de route des outils : [docs/triage-skill-v2.md](docs/triage-skill-v2.md), § 2.4 bis.
 
-## Règles apprises de cet utilisateur
-{{learned_rules}}
+Le `system` est identique octet pour octet d'un fichier à l'autre d'une même racine (aucune date du jour, listes dans un ordre fixe, clients limités aux 30 premiers par code) : Anthropic le reçoit en bloc avec `cache_control: {"type": "ephemeral"}` (lu depuis le cache à partir du deuxième fichier d'un lot), Mistral et Gemini appliquent leur cache de préfixe implicite. Ordre de grandeur : 2 800 jetons de `system`, 350 à 700 de `user`.
 
-## Dossiers candidats (chemin relatif — description)
-{{candidate_folders}}
+**Réponse attendue : l'analyse avant la décision.**
 
-## Exemples de corrections passées (fichier d'origine → choix final)
-{{correction_examples}}
-
-## Indice
-Client détecté automatiquement (peut être faux) : {{client_hint}}
-
-## Fichier à ranger
-Nom d'origine : {{original_name}}
-Type : {{extension}} — {{mime}} — {{size_human}}
-Dates : créé le {{created}}, modifié le {{modified}}
-Dossier d'origine : {{origin_folder}}
-Contenu extrait :
-"""
-{{extracted_text}}
-"""
-{{image_note}}
-
-## Format de réponse attendu
+```json
 {
+  "document_kind": "nature du document (1 à 3 mots : facture, bulletin de paie, logo, page web…)",
+  "subject": "sujet : projet, personne, organisme, produit, période — ou null",
+  "document_date_source": "contenu | nom | aucune",
+  "evidence": ["indice lu dans le fichier ou le contexte", "…"],
   "client": "CODE ou null",
   "project_code": "texte ou null",
   "project_name": "texte ou null",
@@ -629,18 +600,18 @@ Contenu extrait :
   "target_folder": "chemin relatif à la racine",
   "folder_is_new": false,
   "confidence": 0.0,
-  "reasoning": "1 à 2 phrases en français",
-  "alternatives": [
-    {"target_folder": "...", "category": "...", "description": "...", "reasoning": "..."}
-  ]
+  "reasoning": "1 à 2 phrases en français, qui citent les indices",
+  "alternatives": [{"target_folder": "…", "category": "…", "description": "…", "reasoning": "…"}]
 }
 ```
 
+Une alternative retenue plafonne la confiance à 0,74 (barème : « deux dossiers se défendent ») : l'utilisateur voit une seule confiance, celle que l'IA a dans la destination, jamais « 95 % · Sûr » à côté d'une demande de vérification. Les quatre premiers champs sont facultatifs côté code (`LLMProposal`) : une réponse de l'ancien prompt reste valide. Ils sont conservés dans `Proposal` et affichés sous la proposition (« Indices : … »). `document_date_source = "aucune"` : le nom est proposé **sans date** plutôt qu'avec la date de modification du fichier (un document de 2024 téléchargé aujourd'hui ne s'appelle pas 2026-…), sauf pour les photos, captures d'écran et vidéos, dont la date de prise de vue (EXIF) ou du fichier est bien celle du document, et sauf quand le document porte lui-même une date de création dans ses propriétés (PDF, Word, Excel, PowerPoint : métadonnée `date_creation_document`), qui est alors utilisée ; sans ce champ (ancien prompt), la date du fichier est utilisée comme avant. Une date écrite dans un autre format (12/10/2026, 2026-10) est lue ; une date avant 1900 ou à plus d'un an dans le futur est rejetée.
+
 Notes :
 
-- Si une image est disponible (photo, PSD, PDF scanné), la joindre au message ; `{{image_note}}` vaut alors « Une image du fichier est jointe. »
-- Limites : 15 dossiers candidats, 5 exemples de corrections, liste des clients filtrée aux 30 plus probables si elle est longue.
-- Le prompt sera ajusté selon les résultats de l'évaluation (section 10).
+- Si une image est disponible (photo, PSD, PDF scanné), elle est jointe au message ; le message dit « Une image du fichier est jointe. »
+- Limites : 15 dossiers candidats (en Particulier, les dossiers de premier niveau créés par l'utilisateur hors des catégories y sont toujours ; à score nul, un dossier par premier niveau plutôt que les quinze premiers de l'alphabet ; le reste de l'arborescence se lit avec `lister_dossiers`), 5 corrections passées (nom proche ou mot distinctif commun ; l'extension seule ne suffit pas), 30 clients.
+- Le prompt est ajusté selon l'évaluation (section 10). Critère de bascule d'une version à l'autre : au moins autant de dossiers acceptables et moins d'erreurs à plus de 0,8 de confiance, sur les deux jeux d'essai (`sandbox/` Professionnel, `sandbox-perso/` Particulier), deux passages chacun avec le même modèle.
 
 ---
 
@@ -790,12 +761,16 @@ IMG_3381.jpg,ACME/2026/2026-042_Campagne-Noel/05_Sources,,ACME/2026/2026-042_Cam
 ```
 
 - `expected_name` : facultatif ;
-- `acceptable_folders` : autres dossiers jugés corrects, séparés par `|`.
+- `acceptable_folders` : autres dossiers jugés corrects, séparés par `|` ;
+- `expected_keyword` : facultatif, mot (nom propre : personne, organisme, projet) qui doit se retrouver dans le nom proposé.
+
+Deux jeux générés par script, hors Git : `python scripts/make_sandbox.py` (Professionnel, agence fictive, 42 fichiers) et `python scripts/make_sandbox_perso.py` (Particulier, 27 fichiers : bulletins du même modèle de nom, factures dont une d'un projet, attestations, CV, trois logos d'une même série, page web d'un projet, photo de carte grise, capture d'écran, PDF scanné, document de 2024 téléchargé aujourd'hui, dossier « startup » créé par l'utilisateur).
 
 `python -m tribin eval <jeu_de_test> [--model <modèle>]` :
 
 - génère les propositions **sans aucun déplacement** ;
-- calcule : % de dossiers exacts, % de dossiers acceptables, % de clients corrects, % de catégories correctes, % de noms exacts (si fournis), confiance moyenne des bonnes et des mauvaises réponses, temps moyen et coût estimé par fichier ;
+- calcule : % de dossiers exacts, % de dossiers acceptables, % de clients corrects, % de catégories correctes, % de noms exacts (si fournis), confiance moyenne des bonnes et des mauvaises réponses, % d'erreurs marquées « à vérifier » et de bonnes réponses marquées à tort, nombre d'erreurs à plus de 0,8 de confiance, % de dates du nom correctes et de mots-clés conservés (si fournis), noms sans date, appels d'outil par fichier et part des fichiers avec appel, dossiers créés alors que le bon existait, temps, coût, jetons d'entrée et de sortie par fichier et part lue depuis le cache de prompt ;
+- `--prompt p7` rejoue l'ancien prompt pour comparer deux versions sur le même jeu ;
 - affiche un rapport et enregistre `eval_results/AAAA-MM-JJ_HHMM_<modèle>_<prompt_version>.csv` pour comparer les essais.
 
 Indicateur principal en usage réel : **taux de propositions acceptées sans modification**, calculé à partir du journal. Objectif : 80 % ou plus.
@@ -884,6 +859,9 @@ Indicateur principal en usage réel : **taux de propositions acceptées sans mod
 | 2026-10-25 | 4 (interface) | Raccourci clavier global Ctrl + Alt + T (Windows, RegisterHotKey) : envoie à TriBin la sélection de l'Explorateur au premier plan (Shell.Application) ; vérifié pour de vrai (appui simulé, sélection lue, noms accentués). Page Accueil (références Mobbin : Fireflies, ManyChat, Ditto) : bannière, 4 chiffres animés (rangés, sans correction, corrigés par vous, automatiques) et 5 derniers rangements. Historique fichier par fichier (références Customer.io, 7shifts) : nom, statut, heure ; détails dépliables (date, dossier, catégorie, confiance, décision, nom d'origine) avec Ouvrir / Afficher / Annuler ; filtres Rangements, Annulés, Dépôts. Entrée « Trier avec TriBin » au clic droit (HKCU) | — | Retours d'usage |
 | 2026-10-25 | 4 (personnel) | Profondeur des dossiers réglable (mode personnel, 1 à 5, 3 par défaut) : catégorie puis sous-dossiers choisis par l'IA (prompt p6-perso), dossiers existants réutilisés avec leur nom exact, chemin tronqué à la profondeur ; les anciennes conventions personnelles « catégorie/année » passent à ce mode. Création de ces sous-dossiers sans demander (comme les catégories). Réglages : page « Rangement » (convention, profondeur, rangement automatique avec interrupteur et seuil de confiance 60-95 % au curseur). Essai réel Mistral Medium : certificat -> Etudes/Certifications (0,90), attestation de bénévolat -> Etudes/Attestations/Benevolat (0,55), diplôme, mémoire, CV -> Etudes (0,90-0,95) | — | Retours d'usage |
 | 2026-10-25 | 5 (règles, compte) | Compte local (table SQLite `account`, schéma v2) affiché en bas de la barre latérale à la place du modèle d'IA, prêt pour une connexion future aux serveurs de l'entreprise. Dossiers à ranger et à ne jamais toucher propres à chaque mode (`by_mode`). Règles en trois sortes (apprises des corrections, confirmées par au moins deux validations sans modification vers le même dossier, ajoutées par l'utilisateur) : cartes dépliables avec leur logique, interrupteur, modification, suppression (une règle confirmée supprimée n'est jamais recréée), vue texte à copier-coller. Lien vers une page de confidentialité. Modes renommés Particulier / Professionnel ; question d'activité « Vous travaillez : Seul / En équipe ». La convention reste un fichier YAML : en mode Professionnel elle est partagée sur le serveur de l'équipe | — | Retours d'usage |
+| 2026-10-25 | 1 (contenu, contexte) | Cas réel : « Stagio Traitement.html » proposé dans Etudes (55 %) au lieu de « startup », qui contenait déjà des fichiers Stagio. Causes : HTML non lu ; corrections vers un dossier hors catégories marquées « contraires à l'équipe », donc ignorées, même en mode Particulier ; fichiers déjà rangés rapprochés seulement par modèle de nom ; confiance forcée à 0,55 dès qu'une alternative existe. Correctifs : 85 extensions de plus lues (104 en tout ; pages web, y compris construites en JavaScript, données, OpenDocument, RTF, EPUB, e-mails, iWork, anciens Office, archives, texte et code avec secrets masqués), sans nouvelle dépendance ; en mode Particulier, les corrections servent toujours d'exemples et de règles ; rapprochement par mot distinctif (« stagio » : au plus 2 dossiers) ; prompts p6 / p7-perso (un dossier existant du même sujet passe avant une catégorie ; plus de plafond à 0,55) ; une IA qui hésite fait vérifier le fichier et n'est jamais rangée automatiquement, avec sa vraie confiance ; un rangement annulé revient dans « À ranger ». Prompt rejoué sur une copie de la base : contenu, fichiers « stagio » de « startup » et correction passée désormais présents | non mesuré | `tribin eval` avec Mistral Medium (p6) ; réanalyser le cas Stagio dans l'appli |
+| 2026-10-25 | 4 (autorisations, séries) | Essai réel (logos « Sarah Mbossa ») : 4 fichiers d'une même série rangés dans 4 dossiers (startup, Photos ×2, Etudes), « startup » choisi sans rapport, logos rangés dans Photos, nom de la personne perdu, alternative faible ajoutée à chaque fois (tout « à vérifier »). Correctifs : Réglages › **Autorisations** › « Créer des dossiers » (par défaut oui en Particulier, non en Professionnel) : autorisé, dossiers et sous-dossiers proposés créés sans demander, y compris en rangement automatique ; sinon l'IA ne propose aucun nouveau dossier et la simulation est montrée avant toute création. Prompts p7 / p8-perso : un dossier existant seulement s'il parle du même sujet ; catégorie selon la nature (logos ≠ Photos) ; dossier dédié plutôt qu'un dossier approximatif ; nom propre gardé dans la description ; alternative seulement en cas de vraie hésitation ; fichiers d'une série au même endroit. Fichiers qui partagent un mot distinctif analysés l'un après l'autre, chacun voyant où les précédents vont (« Déposés en même temps »). Bug : un double appui sur « Ranger ici » rangeait deux fois (2e essai : « source introuvable ») — bloqué ; alerte de simulation réécrite (ce qui bloque d'abord, en clair) | non mesuré | Réanalyser la série dans l'appli ; `tribin eval` (p7) |
+| 2026-10-25 | 1 (skill v2) | **Skill de triage v2** ([docs/triage-skill-v2.md](docs/triage-skill-v2.md), audit [docs/audit-2026-10-25.md](docs/audit-2026-10-25.md)) : prompts p8 / p9-perso (méthode observer › situer › décider › nommer › évaluer, deux prompts complets, barème ancré, trois exemples, analyse avant décision : `document_kind`, `subject`, `document_date_source`, `evidence` affichés « Indices : … »), contexte stable dans le `system` (cache de prompt Anthropic, préfixe identique testé), **outil `lister_dossiers`** appelé par l'IA (registre générique, 3 appels par fichier, boucle d'outils chez les trois fournisseurs, « L'IA a regardé : … »), date du fichier abandonnée sauf photos / captures et propriétés du document, candidats diversifiés et dossiers libres toujours présents, corrections de l'audit A.2 n° 8 à 12, 14, 15, 17 à 19, règles apprises sans format de nom, jeu d'essai Particulier (`scripts/make_sandbox_perso.py`, 27 fichiers, dossier « Graphisme » existant), ancien prompt gardé (`--prompt p7`). **Mesure** Mistral Medium, base vierge, deux passages par jeu et par prompt. Pro (42 fichiers) : p7 **92,9 %** acceptables (90,5 / 95,2), 3 erreurs à plus de 0,8 par passage, 0 % des erreurs signalées ; v2 **95,2 %** (92,9 / 97,6), 1,5 erreur confiante par passage, 83 % des erreurs signalées, bonnes signalées à tort 10 % (p7 : 14 %). Particulier (27 fichiers) : p7 96,3 % et v2 96,3 % (la même unique erreur : une image de synthèse « randonnée » prise pour une création graphique, 0,9 dans les deux cas), v2 garde 100 % des noms propres (p7 : 89 %), ne crée aucun dossier en double (p7 : « Voyages » créé) et appelle l'outil exactement quand il faut (logos de la série : racine puis « Graphisme » → `Graphisme/Sarah-Mbossa`). Coût : ~2 fois plus de jetons d'entrée (5 100 contre 2 500 ; Mistral ne dit pas ce qu'il lit depuis le cache) et de sortie (270 contre 130), +0,9 s par fichier. Réserve : en Pro, 20 noms sur 42 sortaient sans date (PSD, pptx, docx sans date lue) ; la date de création écrite dans le document (propriétés PDF / Office) sert désormais de repli, ce qui en rend 9 (non remesuré). Critère de bascule atteint (au moins autant de dossiers acceptables sur les deux jeux, moins d'erreurs confiantes en Pro, égalité en Particulier) : **v2 actif par défaut** | 95,2 % Pro, 96,3 % Particulier (Mistral Medium, réel) | Haiku si clé disponible ; A.2 n° 20 à 23 ; outils `lire_plus`, `chercher_ranges` |
 
 ---
 

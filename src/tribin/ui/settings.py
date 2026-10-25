@@ -1,5 +1,5 @@
-"""Réglages, rangés par catégories dans une colonne à gauche : Dossiers, Intelligence artificielle,
-Apprentissage, Système. Chaque réglage : titre et aide à gauche, contrôle à droite."""
+"""Réglages, rangés par catégories dans une colonne à gauche : Dossiers, Rangement, Autorisations,
+Intelligence artificielle, Apprentissage, Système, Données. Chaque réglage : titre et aide à gauche, contrôle à droite."""
 
 from __future__ import annotations
 
@@ -76,14 +76,16 @@ MODELS = {"anthropic": ["claude-haiku-5-5", "claude-sonnet-5-5"],
           "gemini": ["gemini-flash-latest", "gemini-flash-lite-latest", "gemini-pro-latest"],
           "mistral": ["mistral-medium-latest", "mistral-small-latest", "mistral-large-latest"]}
 PAGES = (("folders", "Dossiers", "folder"), ("filing", "Rangement", "files"),
-         ("ai", "Intelligence artificielle", "sparkle"),
-         ("learning", "Apprentissage", "brain"), ("system", "Système", "monitor"))
+         ("permissions", "Autorisations", "shield"), ("ai", "Intelligence artificielle", "sparkle"),
+         ("learning", "Apprentissage", "brain"), ("system", "Système", "monitor"),
+         ("data", "Données", "database"))
 
 
 class SettingsPage(QScrollArea):
-    """Page de réglages : titre, phrase d'introduction, puis une ligne par réglage."""
+    """Page de réglages : titre, phrase d'introduction, puis une ligne par réglage. `back` : lien « ‹ Page » au-dessus
+    du titre, pour une sous-page (« Toutes les règles »)."""
 
-    def __init__(self, title: str, lead: str = ""):
+    def __init__(self, title: str, lead: str = "", back: tuple[str, object] | None = None):
         super().__init__()
         self.setWidgetResizable(True)
         self.setFrameShape(QFrame.Shape.NoFrame)
@@ -92,6 +94,14 @@ class SettingsPage(QScrollArea):
         self.body = QVBoxLayout(content)
         self.body.setContentsMargins(32, 28, 32, 24)
         self.body.setSpacing(0)
+        if back:
+            label, slot = back
+            link = QPushButton(label)
+            link.setObjectName("Link")
+            link.setIcon(line_icon("chevron-left", "#3B4CCA", 14))
+            link.clicked.connect(slot)
+            self.body.addWidget(link, 0, Qt.AlignmentFlag.AlignLeft)
+            self.body.addSpacing(6)
         heading = QLabel(title)
         heading.setObjectName("Title")
         self.body.addWidget(heading)
@@ -101,8 +111,13 @@ class SettingsPage(QScrollArea):
         self.body.addSpacing(20)
         self.setWidget(content)
 
-    def add_row(self, title: str, help_text: str, control: QWidget) -> None:
-        self.body.addWidget(divider())
+    def add_row(self, title: str, help_text: str, control: QWidget) -> QWidget:
+        """Ajoute la ligne et la renvoie (pour la masquer selon le mode, par exemple)."""
+        container = QWidget()
+        outer = QVBoxLayout(container)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        outer.addWidget(divider())
         row = QHBoxLayout()
         row.setContentsMargins(0, 18, 0, 18)
         row.setSpacing(24)
@@ -119,7 +134,9 @@ class SettingsPage(QScrollArea):
         holder.setLayout(left)
         row.addWidget(holder, 0, Qt.AlignmentFlag.AlignTop)
         row.addWidget(control, 1, Qt.AlignmentFlag.AlignTop)
-        self.body.addLayout(row)
+        outer.addLayout(row)
+        self.body.addWidget(container)
+        return container
 
     def add_wide(self, title: str, help_text: str, control: QWidget) -> None:
         """Réglage sur toute la largeur (titre et aide au-dessus) : listes et grands champs."""
@@ -158,7 +175,8 @@ class SettingsDialog(QDialog):
         self.resize(960, 660)
 
         self.pages = QStackedWidget()
-        for build in (self._folders_page, self._filing_page, self._ai_page, self._learning_page, self._system_page):
+        for build in (self._folders_page, self._filing_page, self._permissions_page, self._ai_page, self._learning_page,
+                      self._system_page, self._data_page, self._all_rules_page):  # la dernière : sous-page, hors de la navigation
             page = build()
             page.finish()
             self.pages.addWidget(page)
@@ -235,13 +253,17 @@ class SettingsDialog(QDialog):
         for card in self.mode_cards.values():
             card.radio.toggled.connect(lambda checked: checked and self._mode_switched())
         self.roots = roots_picker(cfg.roots)
-        page.add_row("Dossiers à ranger", "", self.roots)
+        remap = QPushButton("Réanalyser les dossiers")
+        remap.setToolTip("Relit la structure des dossiers à ranger (après une réorganisation, par exemple).")
+        remap.clicked.connect(self.c.remap)
+        page.add_row("Dossiers à ranger", "", column(self.roots, remap))
         self.excluded = excluded_picker(cfg.local_excluded, self.roots.values)
         page.add_row("Dossiers à ne jamais toucher", "", self.excluded)
         return page
 
     def _filing_page(self) -> SettingsPage:
-        """Comment ranger : convention, profondeur des dossiers (mode personnel) et rangement automatique."""
+        """Comment ranger : convention de l'équipe (mode professionnel), nom des fichiers, profondeur des dossiers
+        (mode personnel) et rangement automatique."""
         cfg = self.c.service.config
         page = SettingsPage("Rangement")
         conv_row = QHBoxLayout()
@@ -250,10 +272,9 @@ class SettingsDialog(QDialog):
         browse.clicked.connect(self._browse_convention)
         conv_row.addWidget(self.convention, 1)
         conv_row.addWidget(browse)
-        remap = QPushButton("Réanalyser les dossiers")
-        remap.setToolTip("Relit la structure des dossiers à ranger (après une réorganisation, par exemple).")
-        remap.clicked.connect(self.c.remap)
-        page.add_row("Convention de rangement", "", column(conv_row, remap))
+        # Fichier partagé par l'équipe ; en mode particulier, TriBin gère seul sa convention : rien à montrer.
+        self.convention_row = page.add_row("Convention de l'équipe", "", column(conv_row))
+        self.convention_row.setVisible(self.initial_mode == "work")
         page.add_row("Nom des fichiers", "", self._naming_box())
         self.depth_buttons = QButtonGroup(self)
         self.initial_depth = self._current_depth()
@@ -389,6 +410,32 @@ class SettingsDialog(QDialog):
                                     if risky else "")
         self.threshold_hint.setVisible(risky)
 
+    def _permissions_page(self) -> SettingsPage:
+        """Ce que TriBin peut faire seul, sans demander : un interrupteur et une phrase par autorisation."""
+        page = SettingsPage("Autorisations")
+        self.initial_create_folders = self.c.service.creates_folders()
+        self.create_folders = ToggleSwitch(self.initial_create_folders)
+        self.create_folders.setAccessibleName("Créer des dossiers")
+        self.create_folders_state = QLabel()
+        self.create_folders_state.setStyleSheet("font-weight: 600;")
+        self.create_folders_hint = muted()
+        switch_row = QHBoxLayout()
+        switch_row.setSpacing(12)
+        switch_row.addWidget(self.create_folders)
+        switch_row.addWidget(self.create_folders_state, 1)
+        page.add_row("Créer des dossiers", "", column(switch_row, self.create_folders_hint))
+        self.create_folders.toggled.connect(lambda _: self._permissions_changed())
+        self._permissions_changed()
+        return page
+
+    def _permissions_changed(self) -> None:
+        on = self.create_folders.isChecked()
+        self.create_folders_state.setText("Autorisé" if on else "Avec votre accord")
+        self.create_folders_hint.setText(
+            "TriBin crée seul les dossiers et sous-dossiers qu'il propose (« Design/Sarah-Mbossa »). "
+            "Tout reste annulable depuis l'Historique." if on else
+            "TriBin range dans les dossiers existants ; s'il en faut un nouveau, il vous le montre avant de le créer.")
+
     def _ai_page(self) -> SettingsPage:
         svc = self.c.service
         ai_settings = svc.ai_settings()
@@ -440,18 +487,37 @@ class SettingsDialog(QDialog):
         page.add_row("Profil", "Envoyé à l'IA avec chaque fichier.", self.profile)
         from tribin.ui.rules_view import RulesEditor
 
-        alerts = team_rule_alerts(svc.db)
+        alerts = team_rule_alerts(svc.db) if self.initial_mode == "work" else []  # pas d'équipe en mode personnel
         if alerts:
             warning = QLabel("\n".join(alerts) + "\nPensez à en parler au référent des conventions.")
             warning.setObjectName("Warning")
             warning.setWordWrap(True)
             page.add_wide("Règles d'équipe souvent corrigées", "", warning)
         self.rules = RulesEditor(self.c)
+        self.rules.show_all.connect(self.show_all_rules)
         page.add_wide("Règles", "", self.rules)
         return page
 
+    def _all_rules_page(self) -> SettingsPage:
+        from tribin.ui.rules_view import RulesBrowser
+
+        page = SettingsPage("Toutes les règles", back=("Apprentissage", self._back_to_learning))
+        self.rules_browser = RulesBrowser(self.c)
+        page.body.addWidget(self.rules_browser)
+        return page
+
+    def show_all_rules(self, kind: str = "learned") -> None:
+        self.rules_browser.search.clear()
+        self.rules_browser.show_kind(kind)
+        self.pages.setCurrentIndex(len(PAGES))
+
+    def _back_to_learning(self) -> None:
+        self.rules.reload()  # règles modifiées, ajoutées ou supprimées sur la page « Toutes les règles »
+        index = [key for key, *_ in PAGES].index("learning")
+        self.nav.button(index).setChecked(True)
+        self.pages.setCurrentIndex(index)
+
     def _system_page(self) -> SettingsPage:
-        journal_dir = self.c.service.settings.journal_dir
         page = SettingsPage("Système")
         self.context_menu = QPushButton()
         self.context_menu.clicked.connect(self._toggle_context_menu)
@@ -471,13 +537,24 @@ class SettingsDialog(QDialog):
             button.setEnabled(sys.platform == "win32")
         page.add_row("Raccourcis", "" if sys.platform == "win32" else "Disponible sous Windows.",
                      column(sendto, desktop))
-        path = QLabel(str(journal_dir))
+        return page
+
+    def _data_page(self) -> SettingsPage:
+        """Fichiers que TriBin tient à jour sur ce poste : où ils sont, et un bouton pour les ouvrir."""
+        settings = self.c.service.settings
+        page = SettingsPage("Données")
+        page.add_row("Journal des opérations", "", self._folder_box(settings.journal_dir))
+        page.add_row("Dossier de TriBin", "Réglages, règles, profil et conventions.", self._folder_box(settings.data_dir))
+        return page
+
+    @staticmethod
+    def _folder_box(folder: Path) -> QWidget:
+        path = QLabel(str(folder))
         path.setWordWrap(True)
         path.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         open_dir = QPushButton("Ouvrir le dossier")
-        open_dir.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(journal_dir))))
-        page.add_row("Journal des opérations", "", column(path, open_dir))
-        return page
+        open_dir.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder))))
+        return column(path, open_dir)
 
     # --- actions ------------------------------------------------------------------------------
 
@@ -492,6 +569,7 @@ class SettingsDialog(QDialog):
         self.roots.set_values(values["roots"])
         self.excluded.set_values(values["local_excluded"])
         self.convention.setText(values["convention_path"])
+        self.convention_row.setVisible(new == "work")
         self.shown_mode = new
 
     def mode(self) -> str:
@@ -560,8 +638,10 @@ class SettingsDialog(QDialog):
         cfg.roots = roots
         cfg.local_excluded = self.excluded.values()
         cfg.convention_path = self.convention.text().strip()
-        if mode != self.initial_mode and not (cfg.convention_path and Path(cfg.convention_path).is_file()):
-            path, note = create_convention(mode, cfg.roots, svc.settings.data_dir)  # première utilisation du mode
+        missing = not (cfg.convention_path and Path(cfg.convention_path).is_file())
+        if missing and (mode != self.initial_mode or mode == "personal"):
+            # première utilisation du mode, ou convention personnelle disparue (aucun champ pour la corriger)
+            path, note = create_convention(mode, cfg.roots, svc.settings.data_dir)
             cfg.convention_path = str(path)
             QMessageBox.information(self, "TriBin", note)
         cfg.remember_mode(mode)
@@ -570,6 +650,8 @@ class SettingsDialog(QDialog):
         self.naming_changed = self.date_position() != self.initial_date_position and bool(cfg.convention_path)
         if self.naming_changed:
             set_date_position(Path(cfg.convention_path), self.date_position())
+        if self.create_folders.isChecked() != self.initial_create_folders:  # sinon : le réglage par défaut du mode
+            cfg.auto_create_folders = self.create_folders.isChecked()
         cfg.auto_file = self.auto_file.isChecked()
         cfg.auto_min_confidence = self.threshold.value() / 100
         cfg.hotkey = self.hotkey.isChecked()

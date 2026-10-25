@@ -37,6 +37,8 @@ def extract_docx(path: Path, info: FileInfo) -> None:
         info.metadata["titre"] = core.title[:200]
     if core.author:
         info.metadata["auteur"] = core.author[:100]
+    if core.created:
+        info.metadata["date_creation_document"] = core.created.strftime("%Y-%m-%d")
     info.text = _join(parts)
 
 
@@ -46,6 +48,9 @@ def extract_xlsx(path: Path, info: FileInfo) -> None:
     wb = load_workbook(str(path), read_only=True, data_only=True)
     try:
         info.metadata["feuilles"] = ", ".join(wb.sheetnames)[:300]
+        created = getattr(getattr(wb, "properties", None), "created", None)
+        if created:
+            info.metadata["date_creation_document"] = created.strftime("%Y-%m-%d")
         parts: list[str] = []
         for ws in wb.worksheets[:5]:
             parts.append(f"[Feuille : {ws.title}]")
@@ -63,6 +68,9 @@ def extract_pptx(path: Path, info: FileInfo) -> None:
 
     prs = Presentation(str(path))
     info.metadata["diapositives"] = str(len(prs.slides))
+    created = getattr(prs.core_properties, "created", None)
+    if created:
+        info.metadata["date_creation_document"] = created.strftime("%Y-%m-%d")
     parts: list[str] = []
     for index, slide in enumerate(prs.slides, start=1):
         title = slide.shapes.title.text if slide.shapes.title is not None else ""

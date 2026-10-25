@@ -143,6 +143,9 @@ def apply_versioning(info: FileInfo, proposal: Proposal, ctx: ProposeContext) ->
     if version == proposal.fields.version:
         return
     proposal.fields.version = version
-    name, _ = fit_to_path(proposal.fields, conv.naming, info.extension, target, fallback_date=info.modified)
+    from tribin.engine.proposer import date_fallback
+
+    name, _ = fit_to_path(proposal.fields, conv.naming, info.extension, target,
+                          fallback_date=date_fallback(proposal.document_date_source, info))
     existing = {e.name for e in os.scandir(target)} if target.is_dir() else set()
     proposal.new_name = unique_name(name, existing)

@@ -82,6 +82,7 @@ class DetailPanel(QFrame):
         self.item: QueueItem | None = None
         self._folder = ""
         self._categories: list[str] = []
+        self._personal = False  # mode personnel : la catégorie est le PREMIER niveau du dossier, pas le dernier
         self._filling = False
 
         # --- en-tête : le fichier ---
@@ -181,6 +182,7 @@ class DetailPanel(QFrame):
         self.category = QComboBox()
         self.category.setMinimumWidth(200)
         self.category.setAccessibleName("Catégorie")
+        self.category.setPlaceholderText("Choisir une catégorie")
         self.category.activated.connect(self._category_chosen)
         cat_row = QHBoxLayout()
         cat_row.addWidget(self.category)
@@ -205,6 +207,11 @@ class DetailPanel(QFrame):
         self.reasoning.setStyleSheet("color: #3A4063;")
         self.reasoning.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         inner.addWidget(self.reasoning)
+        self.evidence = QLabel()  # indices relevés par l'IA avant de décider (skill v2)
+        self.evidence.setWordWrap(True)
+        self.evidence.setStyleSheet("color: #6B7194; font-size: 12px;")
+        self.evidence.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        inner.addWidget(self.evidence)
         self.warnings = QLabel()
         self.warnings.setObjectName("Warning")
         self.warnings.setWordWrap(True)
@@ -263,10 +270,11 @@ class DetailPanel(QFrame):
         self._folder = folder.strip().strip("/")
         parts = [p for p in self._folder.split("/") if p]
         self.breadcrumb.set_parts(parts)
-        current = parts[-1] if parts else ""
+        current = (parts[0] if self._personal else parts[-1]) if parts else ""
         index = self.category.findData(current)
         self.category.setCurrentIndex(index)
-        self.category.setEnabled(index >= 0 and self.name.isEnabled())
+        # mode personnel : une catégorie se choisit toujours (aucun dossier, ou dossier hors catégories)
+        self.category.setEnabled(self.name.isEnabled() and (index >= 0 or self._personal))
         self.validate_button.setEnabled(self.name.isEnabled() and bool(parts))  # pas de dossier : rien à ranger
         self._changed()
 
@@ -281,7 +289,12 @@ class DetailPanel(QFrame):
     def _category_chosen(self, index: int) -> None:
         code = self.category.itemData(index)
         parts = [p for p in self._folder.split("/") if p]
-        if code and parts and parts[-1] in self._categories:
+        if not code:
+            return
+        if self._personal:
+            if not parts or parts[0] != code:
+                self.set_folder(code)  # autre catégorie : ses propres sous-dossiers, à choisir avec « Changer… »
+        elif parts and parts[-1] in self._categories:
             parts[-1] = code
             self.set_folder("/".join(parts))
 
@@ -307,7 +320,7 @@ class DetailPanel(QFrame):
     # --- affichage ----------------------------------------------------------------------------
 
     def show_item(self, item: QueueItem | None, name: str = "", folder: str = "",
-                  categories: list[str] | None = None) -> None:
+                  categories: list[str] | None = None, personal: bool = False) -> None:
         """Affiche un fichier ; `name` et `folder` : valeurs en cours (éventuellement modifiées)."""
         self.item = item
         self.setVisible(item is not None)
@@ -316,6 +329,7 @@ class DetailPanel(QFrame):
         self._filling = True
         try:
             self._build_categories(categories or [])
+            self._personal = personal
             p = item.proposal
             ready = item.status == "ready" and p is not None
             key = item_level(item)[0]
@@ -346,6 +360,15 @@ class DetailPanel(QFrame):
                 self.reasoning.setText(item.error or "Erreur pendant l'analyse.")
             else:
                 self.reasoning.setText(p.reasoning if p and p.reasoning else "—")
+            from tribin.engine.tools import looked_at
+
+            evidence = [e for e in (p.evidence if p and ready else []) if e]
+            lines = ["Indices : " + " · ".join(evidence)] if evidence else []
+            looked = looked_at(p.tool_calls) if p and ready else []
+            if looked:
+                lines.append("L'IA a regardé : " + ", ".join(looked))
+            self.evidence.setText("\n".join(lines))
+            self.evidence.setVisible(bool(lines))
             shown = self.reasoning.text()
             others = [w for w in (p.warnings if p else [])
                       if not w.startswith((HESITATION, NEW_VERSION)) and w not in shown]  # pas deux fois le même message

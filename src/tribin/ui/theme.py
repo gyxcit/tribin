@@ -52,6 +52,10 @@ QPushButton#NavItem {{ background: transparent; border: none; border-radius: 6px
 QPushButton#NavItem:hover {{ background: #ECEEF6; }}
 QPushButton#NavItem:checked {{ background: {SELECTION}; color: {INK}; font-weight: 600; }}
 QLabel#NavCount {{ color: {MUTED}; font-size: 12px; font-weight: 500; }}
+QLabel#NavCount[compact="true"] {{ background: #E5484D; color: white; font-size: 10px; font-weight: 700;
+    border-radius: 7px; padding: 0 4px; min-width: 6px; min-height: 14px; max-height: 14px; }}
+QFrame#BrandToggle {{ background: transparent; border-radius: 8px; }}
+QFrame#BrandToggle:hover {{ background: #ECEEF6; }}
 QLabel#AiStatus {{ color: {MUTED}; font-size: 12px; padding: 6px 10px; }}
 QFrame#Divider {{ background: {BORDER}; border: none; max-height: 1px; min-height: 1px; }}
 
@@ -167,11 +171,13 @@ QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; }}
 """
 
 
-def level_for(confidence: float | None, manual: bool = False, waiting: bool = False) -> tuple[str, str, str, str]:
-    """Niveau de confiance : (clé, libellé, fond, texte). Seuils : 0,8 et 0,6 (marqueur « à vérifier »)."""
+def level_for(confidence: float | None, manual: bool = False, waiting: bool = False,
+              hesitant: bool = False) -> tuple[str, str, str, str]:
+    """Niveau de confiance : (clé, libellé, fond, texte). Seuils : 0,8 et 0,6 (marqueur « à vérifier ») ; une IA qui
+    hésite entre deux dossiers fait toujours vérifier."""
     if waiting:
         return LEVEL_WAIT
-    if manual or confidence is None or confidence < 0.6:
+    if manual or hesitant or confidence is None or confidence < 0.6:
         return LEVEL_CHECK
     return LEVEL_SURE if confidence >= 0.8 else LEVEL_LOOK
 

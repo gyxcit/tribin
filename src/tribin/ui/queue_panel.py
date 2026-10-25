@@ -149,6 +149,13 @@ class QueuePanel(QFrame):
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.list.currentRowChanged.connect(self._row_changed)
         layout.addWidget(self.list, 1)
+        self.empty = QLabel()  # onglet ou recherche sans résultat : un message plutôt qu'une liste vide
+        self.empty.setObjectName("Empty")
+        self.empty.setWordWrap(True)
+        self.empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.empty.setContentsMargins(24, 32, 24, 32)
+        self.empty.hide()
+        layout.addWidget(self.empty, 1)
 
         foot = QFrame()
         foot.setObjectName("PaneFoot")
@@ -233,11 +240,24 @@ class QueuePanel(QFrame):
                 self.list.setItemWidget(entry, widget)
                 self.order.append(item.file_id)
         self.list.blockSignals(False)
+        self.empty.setText(self._empty_text(needle))
+        self.empty.setVisible(not self.order)
+        self.list.setVisible(bool(self.order))
         target = current_id if current_id in self.order else (self.order[0] if self.order else None)
         if target:
             self.select_file(target)
         else:
             self.selection_changed.emit("")
+
+    def _empty_text(self, needle: str) -> str:
+        if needle:
+            return "Aucun fichier ne correspond à la recherche."
+        return {
+            "ready": "Aucun fichier prêt pour l'instant.\nLes propositions sûres apparaissent ici ; les autres attendent "
+                     "votre avis dans « À vérifier ».",
+            "check": "Rien à vérifier : toutes les propositions sont prêtes.",
+            "aside": "Aucun fichier mis de côté.",
+        }.get(self.tab, "Aucun fichier déposé.")
 
     # --- sélection ----------------------------------------------------------------------------
 

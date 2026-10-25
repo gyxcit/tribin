@@ -42,7 +42,8 @@ class FolderProfile(BaseModel):
         if not self.file_count:
             return "dossier vide"
         exts = ", ".join(e.lstrip(".") for e in self.extensions[:3])
-        return f"{self.file_count} fichier(s) ({exts}), ex. {self.samples[0]}"
+        example = f", ex. {self.samples[0]}" if self.samples else ""
+        return f"{self.file_count} fichier(s) ({exts}){example}"
 
 
 def detect_patterns(names: list[str]) -> dict[str, str]:
@@ -109,13 +110,17 @@ def load_profiles(db: Database, root: Path) -> list[FolderProfile]:
 
 
 def light_update(db: Database, root: Path, fresh: list[FolderProfile]) -> tuple[list[str], list[str]]:
-    """Mise à jour légère au lancement : ajoute les nouveaux dossiers, retire les disparus."""
+    """Mise à jour légère au lancement : ajoute les nouveaux dossiers, retire les disparus, et rafraîchit compteurs,
+    échantillons et motifs des dossiers connus (seule la description, rédigée par l'IA, est conservée)."""
     old = {p.rel: p for p in load_profiles(db, root)}
     new = {p.rel: p for p in fresh}
     added = sorted(set(new) - set(old))
     removed = sorted(set(old) - set(new))
-    if added or removed:
-        merged = [old[r] for r in old if r in new] + [new[r] for r in added]
+    changed = any(r in new and (old[r].file_count, old[r].samples, old[r].extensions) !=
+                  (new[r].file_count, new[r].samples, new[r].extensions) for r in old)
+    if added or removed or changed:
+        merged = [new[r].model_copy(update={"description": old[r].description}) for r in old if r in new] + \
+                 [new[r] for r in added]
         save_profiles(db, root, merged)
     return added, removed
 

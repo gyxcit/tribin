@@ -68,6 +68,7 @@ class AppController:
         self.drop_widget.auto_clicked.connect(self.auto_file_ready)
         self.tray = Tray(self)
         self._tasks: set = set()
+        self._filing: set[str] = set()  # fichiers en cours de rangement : un double clic ne les range pas deux fois
         self.show_ui = show_ui
         self.hotkey = None  # raccourci clavier global, créé au démarrage (jamais pendant les tests)
         self._notice = {"done": 0, "review": []}  # rangés automatiquement / laissés pour avis, à annoncer
@@ -174,14 +175,26 @@ class AppController:
             self.tray.showMessage("TriBin", "\n".join(lines))
 
     def validate(self, validations: list[Validation], force_simulation: bool = False) -> None:
+        validations = [v for v in validations if v.file_id not in self._filing]  # Entrée ou clic pendant un rangement
+        if not validations:
+            return
+        ids = {v.file_id for v in validations}
+        self._filing |= ids
+
+        def release() -> None:
+            self._filing.difference_update(ids)
+
         def prepared(p) -> None:
             if not p.report.ok or p.needs_confirmation or force_simulation:
                 # Lot, création de dossier ou problème : la simulation DOIT être montrée (section 3.1).
                 if not self.confirm_simulation(p.report) or not p.report.ok:
+                    release()
                     return
-            self._run(self.service.commit, p, on_done=committed)
+            self._run(self.service.commit, p, on_done=committed,
+                      on_error=lambda message: (release(), self.error(message)))
 
         def committed(result) -> None:
+            release()
             self.refresh_queue()
             failed = result.failed
             if failed:
@@ -191,7 +204,8 @@ class AppController:
                 self.bin_window.statusBar().showMessage(
                     f"{len([o for o in result.done if o.action == 'move'])} fichier(s) rangé(s) — annulable depuis l'Historique.", 8000)
 
-        self._run(self.service.prepare, validations, on_done=prepared, on_error=self._validation_failed)
+        self._run(self.service.prepare, validations, on_done=prepared,
+                  on_error=lambda message: (release(), self._validation_failed(message)))
 
     def _validation_failed(self, message: str) -> None:
         """Rangement refusé : message bien visible (et pas seulement dans la barre d'état)."""
@@ -304,8 +318,14 @@ class AppController:
     def set_drop_widget_visible(self, visible: bool) -> None:
         self.drop_widget.setVisible(visible)
 
+    def requeue_returned(self) -> None:
+        """Rangements annulés : les fichiers revenus dans le dossier tampon repassent « à ranger »."""
+        for file_id in self.service.requeue_returned():
+            self._analyze(file_id)
+
     def start(self, initial_paths: list[Path]) -> None:
         """Après l'onboarding : reprend les analyses interrompues puis traite les fichiers reçus au lancement."""
+        self.requeue_returned()  # y compris ceux annulés avant que TriBin ne sache les remettre dans la liste
         self.refresh_queue()
         self._run(self.service.check_implicit_corrections)
         self.service.retry_without_ai()  # analyses restées sans IA (clé ou module absent la dernière fois)

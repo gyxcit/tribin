@@ -96,3 +96,27 @@ def test_missing_mistral_key_is_clear(monkeypatch, tmp_path):
     s = load_settings(env_file=tmp_path / "absent.env")
     with pytest.raises(LLMError, match="MISTRAL_API_KEY"):
         make_provider(s)
+
+
+def test_tool_loop_then_final_json():
+    def tool_call(n, chemin):
+        fn = SimpleNamespace(name="lister_dossiers", arguments='{"chemin": "%s"}' % chemin)
+        msg = SimpleNamespace(content="", tool_calls=[SimpleNamespace(id=f"c{n}", function=fn)])
+        return SimpleNamespace(choices=[SimpleNamespace(message=msg)], usage=SimpleNamespace(prompt_tokens=10, completion_tokens=5))
+
+    seen = []
+    p, chat = provider([tool_call(1, ""), response('{"value": 2}')])
+    tools = [{"name": "lister_dossiers", "description": "liste", "input_schema": {"type": "object", "properties": {}}}]
+    assert p.complete_json("s", "u", Schema, tools=tools, call_tool=lambda n, a: seen.append((n, a)) or '{"ok": 1}').value == 2
+    assert seen == [("lister_dossiers", {"chemin": ""})]
+    first, last = chat.calls[0], chat.calls[1]
+    assert first["tools"][0] == {"type": "function", "function": {"name": "lister_dossiers", "description": "liste",
+                                                                  "parameters": {"type": "object", "properties": {}}}}
+    assert first["tool_choice"] == "auto" and "response_format" not in first
+    assert last["messages"][2]["role"] == "assistant" and last["messages"][2]["tool_calls"][0]["id"] == "c1"
+    assert last["messages"][3] == {"role": "tool", "name": "lister_dossiers", "tool_call_id": "c1", "content": '{"ok": 1}'}
+    assert p.last_usage.input_tokens == 130
+
+    p, chat = provider([tool_call(1, ""), tool_call(2, "A"), tool_call(3, "B"), tool_call(4, "C"), response('{"value": 3}')])
+    assert p.complete_json("s", "u", Schema, tools=tools, call_tool=lambda n, a: "{}").value == 3
+    assert chat.calls[-1]["tool_choice"] == "none"

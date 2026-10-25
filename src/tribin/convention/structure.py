@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import string
 from datetime import date
+from pathlib import Path
 
 from tribin.convention.loader import Convention
 from tribin.convention.naming import clean_segment
@@ -75,12 +76,14 @@ def fields_from_folder(rel_folder: str, convention: Convention) -> dict[str, str
     return found
 
 
-def personal_folder_ok(rel_folder: str, convention: Convention) -> bool:
-    """Mode personnel : catégorie connue en tête et au plus `max_depth` niveaux."""
+def personal_folder_ok(rel_folder: str, convention: Convention, root: Path | None = None) -> bool:
+    """Mode personnel : catégorie connue en tête (ou dossier déjà créé par l'utilisateur à la racine, comme
+    « startup », si `root` est donné) et au plus `max_depth` niveaux."""
     parts = [p for p in rel_folder.replace("\\", "/").split("/") if p]
     depth = convention.structure.max_depth
-    return (convention.personal and bool(depth) and 1 <= len(parts) <= depth
-            and convention.find_category(parts[0]) is not None)
+    if not (convention.personal and bool(depth) and 1 <= len(parts) <= depth):
+        return False
+    return convention.find_category(parts[0]) is not None or bool(root and (Path(root) / parts[0]).is_dir())
 
 
 def matches_template(rel_folder: str, convention: Convention) -> bool:

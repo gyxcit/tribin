@@ -64,10 +64,13 @@ def clean_segment(text: str, naming: Naming) -> str:
     return text.strip(" .")
 
 
-def extract_version(original_name: str) -> int | None:
-    """Version présente dans un nom d'origine (v2, V02, _v3, -3…), normalisée en entier."""
+def extract_version(original_name: str, bare_number: bool = True) -> int | None:
+    """Version présente dans un nom d'origine (v2, V02, _v3, -3…), normalisée en entier.
+
+    `bare_number` : un nombre final seul (« visuel_3 ») compte comme une version. À réserver aux catégories
+    versionnées : ailleurs « Facture n° 5 », « Chapitre 3 » ou « CV 2 » ne sont pas des versions."""
     stem, _ = split_extension(original_name)
-    for pattern in _VERSION_PATTERNS:
+    for pattern in _VERSION_PATTERNS if bare_number else _VERSION_PATTERNS[:1]:
         match = pattern.search(stem)
         if match:
             value = int(match.group(1))
