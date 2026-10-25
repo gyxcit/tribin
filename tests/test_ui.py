@@ -726,5 +726,60 @@ def test_rules_editor_list_and_text_views(qapp, controller, monkeypatch):
     assert rows[0].details.isVisibleTo(rows[0])
     rows[0].switch.click()  # interrupteur : règle mise de côté
     assert not list_rules(controller.service.db)[-1].enabled
-    editor.show_view(1)  # vue texte
-    assert "# [ajoutée] Les factures" in editor.text.toPlainText()
+
+
+def test_rules_preview_and_all_rules_page(qapp, controller, monkeypatch):
+    from tribin.learning.rules_store import add_rule
+    from tribin.ui.rules_view import PREVIEW, RuleRow
+    from tribin.ui.settings import PAGES, SettingsDialog
+
+    db = controller.service.db
+    for n in range(5):
+        add_rule(db, f"Règle numéro {n} pour l'électricité" if n == 4 else f"Règle numéro {n}", "manual")
+    dialog = SettingsDialog(controller)
+    controller.extra.append(dialog)
+    preview = [r for r in dialog.rules.findChildren(RuleRow) if r.isVisibleTo(dialog.rules)]
+    assert len(preview) == PREVIEW and preview[0].rule.text.startswith("Règle numéro 4")  # les plus récentes
+    more = [b for b in dialog.rules.findChildren(QPushButton) if b.text() == "Voir tout (5)"]
+    assert len(more) == 1
+    more[0].click()  # page « Toutes les règles », sur « Ajoutées »
+    browser = dialog.rules_browser
+    assert dialog.pages.currentIndex() == len(PAGES) and browser.kind == "manual"
+    assert browser.segment_buttons["manual"].text() == "Ajoutées · 5"
+    rows = [r for r in browser.findChildren(RuleRow) if r.isVisibleTo(browser)]
+    assert len(rows) == 5
+    browser.search.setText("electricite")  # sans accent : trouve « électricité »
+    browser.reload()
+    rows = [r for r in browser.findChildren(RuleRow) if r.isVisibleTo(browser)]
+    assert len(rows) == 1 and browser.segment_buttons["manual"].text() == "Ajoutées · 1"
+    browser.show_view(1)  # vue texte
+    assert "[ajoutée] Règle numéro 0" in browser.text.toPlainText()
+    dialog._back_to_learning()
+    assert PAGES[dialog.pages.currentIndex()][0] == "learning"
+
+
+def test_settings_data_page_has_journal(qapp, controller):
+    from tribin.ui.settings import PAGES, SettingsDialog
+
+    dialog = SettingsDialog(controller)
+    controller.extra.append(dialog)
+    keys = [key for key, *_ in PAGES]
+    system = dialog.pages.widget(keys.index("system"))
+    data = dialog.pages.widget(keys.index("data"))
+    journal = str(controller.service.settings.journal_dir)
+    assert journal not in [w.text() for w in system.findChildren(QLabel)]
+    assert journal in [w.text() for w in data.findChildren(QLabel)]
+
+
+def test_sidebar_collapses_from_logo_and_remembers(qapp, controller):
+    from tribin.ui.bin_window import SIDEBAR_COLLAPSED, SIDEBAR_WIDTH
+
+    window = controller.bin_window
+    assert not window.sidebar_collapsed and window.sidebar.maximumWidth() == SIDEBAR_WIDTH
+    window.brand.clicked.emit()  # clic sur le logo
+    assert window.sidebar_collapsed and window.sidebar.maximumWidth() == SIDEBAR_COLLAPSED
+    assert window.nav_buttons["home"].text() == "" and window.nav_buttons["home"].toolTip() == "Accueil"
+    assert not window.account_chip.name.isVisibleTo(window.account_chip)
+    assert controller.service.config.sidebar_collapsed  # gardé pour la prochaine ouverture
+    window.brand.clicked.emit()
+    assert window.nav_buttons["home"].text() == "Accueil" and not controller.service.config.sidebar_collapsed

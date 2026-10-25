@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QDragEnterEvent, QDropEvent, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
@@ -27,6 +27,7 @@ from tribin.config import STAGING_DIRNAME, is_within
 from tribin.convention.naming import is_valid_name
 from tribin.engine.proposer import normalize_rel
 from tribin.service.bin import Validation
+from tribin.service.config_store import save_config
 from tribin.service.queue import QueueItem
 from tribin.ui.bin_detail import DetailPanel
 from tribin.ui.components import divider
@@ -37,6 +38,40 @@ from tribin.ui.queue_panel import QueuePanel
 if TYPE_CHECKING:
     from tribin.ui.app import AppController
 
+
+
+SIDEBAR_WIDTH = 224
+SIDEBAR_COLLAPSED = 64  # menu replié : icônes seules
+
+
+class BrandToggle(QFrame):
+    """Logo et nom en haut de la navigation : un clic replie ou déplie le menu."""
+
+    clicked = Signal()
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setObjectName("BrandToggle")
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        row = QHBoxLayout(self)
+        row.setContentsMargins(6, 4, 6, 4)
+        row.setSpacing(10)
+        logo = QLabel()
+        logo.setPixmap(logo_pixmap(28))
+        self.name = QLabel("TriBin")
+        self.name.setObjectName("Brand")
+        row.addWidget(logo)
+        row.addWidget(self.name)
+        row.addStretch()
+        self.set_compact(False)
+
+    def set_compact(self, compact: bool) -> None:
+        self.name.setVisible(not compact)
+        self.setToolTip("Déplier le menu" if compact else "Replier le menu")
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802 — API Qt
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
 
 
 def nav_item(text: str, icon: str, checkable: bool = False) -> QPushButton:
@@ -94,44 +129,39 @@ class BinWindow(QMainWindow):
     # --- construction -------------------------------------------------------------------------
 
     def _sidebar(self) -> QFrame:
-        side = QFrame()
+        self.sidebar = side = QFrame()
         side.setObjectName("Sidebar")
-        side.setFixedWidth(224)
         col = QVBoxLayout(side)
         col.setContentsMargins(12, 16, 12, 12)
         col.setSpacing(2)
-        brand_row = QHBoxLayout()
-        brand_row.setContentsMargins(8, 4, 8, 16)
-        brand_row.setSpacing(10)
-        logo = QLabel()
-        logo.setPixmap(logo_pixmap(28))
-        brand = QLabel("TriBin")
-        brand.setObjectName("Brand")
-        brand_row.addWidget(logo)
-        brand_row.addWidget(brand)
-        brand_row.addStretch()
-        col.addLayout(brand_row)
+        self.brand = BrandToggle()
+        self.brand.clicked.connect(self.toggle_sidebar)
+        col.addWidget(self.brand)
+        col.addSpacing(12)
         self.nav = QButtonGroup(self)
         self.nav_buttons: dict[str, QPushButton] = {}
+        self.nav_labels: dict[QPushButton, str] = {}  # textes des boutons, retirés quand le menu est replié
         for key, label, icon in (("home", "Accueil", "home"), ("bin", "À ranger", "inbox"),
                                  ("history", "Historique", "history")):
             button = nav_item(label, icon, checkable=True)
             button.clicked.connect(lambda _=False, k=key: self.show_page(k))
             self.nav.addButton(button)
             self.nav_buttons[key] = button
+            self.nav_labels[button] = label
             col.addWidget(button)
         self.pending_count = QLabel()
         self.pending_count.setObjectName("NavCount")
         self.pending_count.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-        count_row = QHBoxLayout(self.nav_buttons["bin"])
-        count_row.setContentsMargins(0, 0, 10, 0)
-        count_row.addStretch()
-        count_row.addWidget(self.pending_count)
+        self.pending_count.hide()
+        self.count_row = QHBoxLayout(self.nav_buttons["bin"])
+        self.count_row.addStretch()
+        self.count_row.addWidget(self.pending_count)
         col.addStretch()
         col.addWidget(divider())
         col.addSpacing(8)
         settings = nav_item("Réglages", "settings")
         settings.clicked.connect(self.c.show_settings)
+        self.nav_labels[settings] = "Réglages"
         col.addWidget(settings)
         from tribin.ui.account import AccountChip
 
@@ -141,7 +171,34 @@ class BinWindow(QMainWindow):
         col.addWidget(self.account_chip)
         self.update_account()
         self.nav_buttons["home"].setChecked(True)  # la fenêtre s'ouvre sur l'Accueil
+        self.set_sidebar_collapsed(self.c.service.config.sidebar_collapsed)
         return side
+
+    # --- menu repliable -----------------------------------------------------------------------
+
+    def toggle_sidebar(self) -> None:
+        """Clic sur le logo : replie le menu (icônes seules) ou le déplie ; le choix est gardé."""
+        collapsed = not self.sidebar_collapsed
+        self.set_sidebar_collapsed(collapsed)
+        cfg = self.c.service.config
+        cfg.sidebar_collapsed = collapsed
+        save_config(self.c.service.db, cfg)
+
+    def set_sidebar_collapsed(self, collapsed: bool) -> None:
+        self.sidebar_collapsed = collapsed
+        self.sidebar.setFixedWidth(SIDEBAR_COLLAPSED if collapsed else SIDEBAR_WIDTH)
+        self.brand.set_compact(collapsed)
+        for button, label in self.nav_labels.items():
+            button.setText("" if collapsed else label)
+            button.setToolTip(label if collapsed else "")
+        self.account_chip.set_compact(collapsed)
+        # nombre de fichiers en attente : à droite du libellé, ou pastille sur l'icône quand le menu est replié
+        self.pending_count.setProperty("compact", "true" if collapsed else "false")
+        self.pending_count.style().unpolish(self.pending_count)
+        self.pending_count.style().polish(self.pending_count)
+        self.count_row.setContentsMargins(*((0, 3, 3, 0) if collapsed else (0, 0, 10, 0)))
+        self.count_row.setAlignment(self.pending_count, Qt.AlignmentFlag.AlignTop if collapsed
+                                    else Qt.AlignmentFlag.AlignVCenter)
 
     def _bin_page(self) -> QWidget:
         self.queue = QueuePanel()
@@ -214,6 +271,9 @@ class BinWindow(QMainWindow):
             self._edits = kept
             self._save_edits()
         self.pending_count.setText(str(len(items)) if items else "")
+        self.pending_count.setVisible(bool(items))
+        if self.sidebar_collapsed:
+            self.nav_buttons["bin"].setToolTip("À ranger" + (f" · {len(items)}" if items else ""))
         self.bin_pages.setCurrentIndex(1 if items or self.aside else 0)
         if self.pages.currentWidget() is self.home:
             self.home.reload()  # compteurs et derniers rangements à jour

@@ -59,6 +59,15 @@ class AccountChip(QFrame):
         texts.addWidget(self.name)
         texts.addWidget(self.status)
         self.row.addLayout(texts, 1)
+        self.compact = False
+
+    def set_compact(self, compact: bool) -> None:
+        """Menu replié : l'avatar seul, le nom en infobulle."""
+        self.compact = compact
+        self.name.setVisible(not compact)
+        self.status.setVisible(not compact)
+        self.row.setContentsMargins(*((4, 6, 4, 6) if compact else (8, 8, 8, 8)))
+        self.setToolTip(self.name.text() if compact else "Votre compte TriBin")
 
     def set_account(self, account: Account) -> None:
         new_avatar = avatar(account, 32)
@@ -68,6 +77,8 @@ class AccountChip(QFrame):
         self.avatar = new_avatar
         self.name.setText(account.display_name)
         self.status.setText(account.status)
+        if self.compact:
+            self.setToolTip(account.display_name)
 
     def mouseReleaseEvent(self, event) -> None:  # noqa: N802 — API Qt
         if event.button() == Qt.MouseButton.LeftButton:

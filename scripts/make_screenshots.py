@@ -147,6 +147,10 @@ def main() -> None:
              {"count": 3, "folder": "Salaire", "examples": ["« 2026_07_likassi_regis.pdf » → Salaire/2026-07_bulletin.pdf"]},
              rule_key="demo")
     add_rule(db, "Les factures d'électricité vont dans Logement/Energie.")
+    for text in ("Les bannières web vont dans Clients/<client>/Web, jamais dans Print.",
+                 "Les plannings de chantier gardent leur numéro de version à la fin du nom.",
+                 "Les photos IMG_ sans projet identifié restent à vérifier."):
+        add_rule(db, text, "learned", {"count": 4})
     learning = settings_dialog.pages.widget(3)
     for editor in learning.findChildren(RulesEditor):
         editor.reload()
@@ -161,9 +165,18 @@ def main() -> None:
             continue
         area.verticalScrollBar().setValue(area.verticalScrollBar().maximum())
     save(settings_dialog, "reglages-apprentissage.png")
+    settings_dialog.show_all_rules("learned")
+    save(settings_dialog, "reglages-toutes-regles.png")
     settings_dialog.pages.setCurrentIndex(4)
     settings_dialog.nav.button(4).setChecked(True)
     save(settings_dialog, "reglages-systeme.png")
+    settings_dialog.pages.setCurrentIndex(5)
+    settings_dialog.nav.button(5).setChecked(True)
+    save(settings_dialog, "reglages-donnees.png")
+    window.set_sidebar_collapsed(True)
+    window.show_page("bin")
+    save(window, "menu-replie.png")
+    window.set_sidebar_collapsed(False)
     wizard = OnboardingWizard(controller)
     wizard.resize(820, 640)
     save(wizard, "onboarding.png")

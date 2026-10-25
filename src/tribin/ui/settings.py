@@ -1,5 +1,5 @@
-"""Réglages, rangés par catégories dans une colonne à gauche : Dossiers, Intelligence artificielle,
-Apprentissage, Système. Chaque réglage : titre et aide à gauche, contrôle à droite."""
+"""Réglages, rangés par catégories dans une colonne à gauche : Dossiers, Rangement, Intelligence artificielle,
+Apprentissage, Système, Données. Chaque réglage : titre et aide à gauche, contrôle à droite."""
 
 from __future__ import annotations
 
@@ -77,13 +77,15 @@ MODELS = {"anthropic": ["claude-haiku-5-5", "claude-sonnet-5-5"],
           "mistral": ["mistral-medium-latest", "mistral-small-latest", "mistral-large-latest"]}
 PAGES = (("folders", "Dossiers", "folder"), ("filing", "Rangement", "files"),
          ("ai", "Intelligence artificielle", "sparkle"),
-         ("learning", "Apprentissage", "brain"), ("system", "Système", "monitor"))
+         ("learning", "Apprentissage", "brain"), ("system", "Système", "monitor"),
+         ("data", "Données", "database"))
 
 
 class SettingsPage(QScrollArea):
-    """Page de réglages : titre, phrase d'introduction, puis une ligne par réglage."""
+    """Page de réglages : titre, phrase d'introduction, puis une ligne par réglage. `back` : lien « ‹ Page » au-dessus
+    du titre, pour une sous-page (« Toutes les règles »)."""
 
-    def __init__(self, title: str, lead: str = ""):
+    def __init__(self, title: str, lead: str = "", back: tuple[str, object] | None = None):
         super().__init__()
         self.setWidgetResizable(True)
         self.setFrameShape(QFrame.Shape.NoFrame)
@@ -92,6 +94,14 @@ class SettingsPage(QScrollArea):
         self.body = QVBoxLayout(content)
         self.body.setContentsMargins(32, 28, 32, 24)
         self.body.setSpacing(0)
+        if back:
+            label, slot = back
+            link = QPushButton(label)
+            link.setObjectName("Link")
+            link.setIcon(line_icon("chevron-left", "#3B4CCA", 14))
+            link.clicked.connect(slot)
+            self.body.addWidget(link, 0, Qt.AlignmentFlag.AlignLeft)
+            self.body.addSpacing(6)
         heading = QLabel(title)
         heading.setObjectName("Title")
         self.body.addWidget(heading)
@@ -158,7 +168,8 @@ class SettingsDialog(QDialog):
         self.resize(960, 660)
 
         self.pages = QStackedWidget()
-        for build in (self._folders_page, self._filing_page, self._ai_page, self._learning_page, self._system_page):
+        for build in (self._folders_page, self._filing_page, self._ai_page, self._learning_page, self._system_page,
+                      self._data_page, self._all_rules_page):  # la dernière : sous-page, hors de la navigation
             page = build()
             page.finish()
             self.pages.addWidget(page)
@@ -447,11 +458,30 @@ class SettingsDialog(QDialog):
             warning.setWordWrap(True)
             page.add_wide("Règles d'équipe souvent corrigées", "", warning)
         self.rules = RulesEditor(self.c)
+        self.rules.show_all.connect(self.show_all_rules)
         page.add_wide("Règles", "", self.rules)
         return page
 
+    def _all_rules_page(self) -> SettingsPage:
+        from tribin.ui.rules_view import RulesBrowser
+
+        page = SettingsPage("Toutes les règles", back=("Apprentissage", self._back_to_learning))
+        self.rules_browser = RulesBrowser(self.c)
+        page.body.addWidget(self.rules_browser)
+        return page
+
+    def show_all_rules(self, kind: str = "learned") -> None:
+        self.rules_browser.search.clear()
+        self.rules_browser.show_kind(kind)
+        self.pages.setCurrentIndex(len(PAGES))
+
+    def _back_to_learning(self) -> None:
+        self.rules.reload()  # règles modifiées, ajoutées ou supprimées sur la page « Toutes les règles »
+        index = [key for key, *_ in PAGES].index("learning")
+        self.nav.button(index).setChecked(True)
+        self.pages.setCurrentIndex(index)
+
     def _system_page(self) -> SettingsPage:
-        journal_dir = self.c.service.settings.journal_dir
         page = SettingsPage("Système")
         self.context_menu = QPushButton()
         self.context_menu.clicked.connect(self._toggle_context_menu)
@@ -471,13 +501,24 @@ class SettingsDialog(QDialog):
             button.setEnabled(sys.platform == "win32")
         page.add_row("Raccourcis", "" if sys.platform == "win32" else "Disponible sous Windows.",
                      column(sendto, desktop))
-        path = QLabel(str(journal_dir))
+        return page
+
+    def _data_page(self) -> SettingsPage:
+        """Fichiers que TriBin tient à jour sur ce poste : où ils sont, et un bouton pour les ouvrir."""
+        settings = self.c.service.settings
+        page = SettingsPage("Données")
+        page.add_row("Journal des opérations", "", self._folder_box(settings.journal_dir))
+        page.add_row("Dossier de TriBin", "Réglages, règles, profil et conventions.", self._folder_box(settings.data_dir))
+        return page
+
+    @staticmethod
+    def _folder_box(folder: Path) -> QWidget:
+        path = QLabel(str(folder))
         path.setWordWrap(True)
         path.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         open_dir = QPushButton("Ouvrir le dossier")
-        open_dir.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(journal_dir))))
-        page.add_row("Journal des opérations", "", column(path, open_dir))
-        return page
+        open_dir.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder))))
+        return column(path, open_dir)
 
     # --- actions ------------------------------------------------------------------------------
 
