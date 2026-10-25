@@ -138,7 +138,8 @@ class ChoiceCard(QFrame):
             head.addWidget(badge)
         head.addStretch()
         texts.addLayout(head)
-        texts.addWidget(muted(description))
+        if description:
+            texts.addWidget(muted(description))
         row.addLayout(texts, 1)
 
     def mousePressEvent(self, event) -> None:  # noqa: N802 — API Qt
@@ -220,7 +221,7 @@ class ApiKeyField(QWidget):
         self.saved = saved_key or ""
         self.edit.clear()
         self.status_title.setText(f"Clé {name} enregistrée sur cet ordinateur")
-        self.status_detail.setText(f"Se termine par {masked_key(self.saved)}. Rien d'autre à faire.")
+        self.status_detail.setText(f"Se termine par {masked_key(self.saved)}.")
         self.console = console
         self._editing(not self.saved)
 
@@ -233,11 +234,7 @@ class ApiKeyField(QWidget):
             self.edit.clear()
         elif has:
             self.edit.setFocus()
-        self.hint.setText(f"Nouvelle clé à créer sur {self.console}. Elle remplacera l'ancienne à l'enregistrement."
-                          if has and editing else
-                          "" if has else
-                          f"Créez-la sur {self.console}, puis collez-la ici. Sans clé, TriBin fonctionne mais "
-                          "chaque fichier est à ranger à la main.")
+        self.hint.setText("" if has else f"À créer sur {self.console}.")
         self.hint.setVisible(bool(self.hint.text()))
 
     def _show(self, on: bool) -> None:

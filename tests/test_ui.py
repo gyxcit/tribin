@@ -632,9 +632,9 @@ def test_auto_threshold_slider_and_switch(qapp, controller):
     dialog.auto_file.click()  # interrupteur
     assert dialog.auto_file.isChecked() and dialog.threshold.slider.isEnabled()
     dialog.threshold.setValue(95)
-    assert dialog.threshold.value_label.text() == "95 %" and "95 %" in dialog.threshold_hint.text()
+    assert dialog.threshold.value_label.text() == "95 %" and not dialog.threshold_hint.text()
     dialog.threshold.setValue(70)
-    assert "à regarder" in dialog.threshold_hint.text()
+    assert "erreurs possibles" in dialog.threshold_hint.text()  # avertissement sous 80 %
     dialog.threshold.setValue(95)
     dialog._save()
     cfg = controller.service.config

@@ -113,8 +113,7 @@ class AccountDialog(QDialog):
         heading = QLabel("Connexion aux serveurs TriBin : bientôt")
         heading.setStyleSheet("font-weight: 600;")
         box.addWidget(heading)
-        box.addWidget(muted("Votre compte et vos données (réglages, file d'attente, règles apprises) restent pour "
-                            "l'instant sur cet ordinateur, dans une base locale :"))
+        box.addWidget(muted("Vos données restent sur cet ordinateur :"))
         path = QLabel(str(db.path))
         path.setStyleSheet("font-size: 12px; color: #3A4063;")
         path.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)

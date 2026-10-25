@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QEvent, QObject, QUrl, Qt
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtGui import QDesktopServices, QFontMetrics
 from PySide6.QtWidgets import (
     QButtonGroup,
     QComboBox,
@@ -241,10 +241,7 @@ class HistoryView(QWidget):
         titles = QVBoxLayout()
         title = QLabel("Historique")
         title.setObjectName("Title")
-        subtitle = muted("Chaque rangement est noté avant d'être fait et s'annule d'un clic, sans rien écraser. "
-                         "Cliquez sur un fichier pour voir ses détails.")
         titles.addWidget(title)
-        titles.addWidget(subtitle)
         head.addLayout(titles, 1)
         self.filters = QButtonGroup(self)
         for key, label in (("moves", "Rangements"), ("undone", "Annulés"), ("stages", "Dépôts")):
@@ -253,6 +250,9 @@ class HistoryView(QWidget):
             button.setCheckable(True)
             button.setProperty("key", key)
             button.setChecked(key == "moves")
+            bold = button.font()
+            bold.setBold(True)
+            button.setMinimumWidth(QFontMetrics(bold).horizontalAdvance(label) + 30)  # sélectionné : en gras, pas coupé
             self.filters.addButton(button)
             head.addWidget(button, 0, Qt.AlignmentFlag.AlignBottom)
         self.filters.buttonClicked.connect(lambda _: self.reload())
@@ -267,8 +267,6 @@ class HistoryView(QWidget):
         self.content = QVBoxLayout()
         self.content.setSpacing(10)
         self.column.addLayout(self.content)
-        self.footer = muted()
-        self.column.addWidget(self.footer)
         self.column.addStretch()
 
     # --- affichage ----------------------------------------------------------------------------
@@ -321,10 +319,6 @@ class HistoryView(QWidget):
             if first:
                 first.setStyleSheet("QFrame#HistRow { border-top: none; }")
             self.content.addWidget(card)
-        rate = journal.acceptance_rate()
-        self.footer.setText(("Propositions acceptées sans modification : " + f"{rate:.0%}".replace("%", " %") + ". "
-                             if rate is not None else "") + "En cas de problème, le journal reste lisible et "
-                            "restaurable même sans l'application (voir le README).")
         for index in range(self.content.count()):
             widget = self.content.itemAt(index).widget()
             if widget:

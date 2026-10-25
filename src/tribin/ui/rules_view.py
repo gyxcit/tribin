@@ -45,11 +45,7 @@ if TYPE_CHECKING:
 
 PILLS = {"learned": ("Correction", "#FDF0D5", "#8A4B05"), "confirmed": ("Validation", "#DDF5F1", "#0F766E"),
          "manual": ("Ajoutée", "#E3E7FB", "#2F3BA0")}
-EMPTY = {"learned": "Aucune pour l'instant : elles sont tirées de vos corrections (toutes les 5 corrections, ou "
-                    "avec « Analyser mes corrections »).",
-         "confirmed": "Aucune pour l'instant : elles apparaissent quand vous validez plusieurs fois, sans "
-                      "modification, le même type de fichier vers le même dossier.",
-         "manual": "Aucune : ajoutez-en avec « + Ajouter une règle »."}
+EMPTY = {"learned": "Aucune pour l'instant.", "confirmed": "Aucune pour l'instant.", "manual": "Aucune."}
 STYLE = """
 QFrame#RuleList { background: white; border: 1px solid #E2E5EF; border-radius: 12px; }
 QFrame#RuleRow { background: transparent; border: none; border-top: 1px solid #EEF0F6; }
@@ -214,9 +210,7 @@ class RulesEditor(QWidget):
         text_box = QVBoxLayout(text_page)
         text_box.setContentsMargins(0, 0, 0, 0)
         text_box.setSpacing(8)
-        text_box.addWidget(muted("Une règle par ligne. « # » au début : règle désactivée. Les étiquettes [apprise], "
-                                 "[confirmée] et [ajoutée] sont facultatives ; une nouvelle ligne devient une règle "
-                                 "ajoutée par vous, une ligne effacée est supprimée."))
+        text_box.addWidget(muted("Une règle par ligne. « # » au début : règle mise de côté."))
         self.text = QPlainTextEdit()
         self.text.setMinimumHeight(260)
         text_box.addWidget(self.text)

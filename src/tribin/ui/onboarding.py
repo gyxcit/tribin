@@ -47,17 +47,13 @@ RAIL_NOTES = ("Rien n'est supprimé ni écrasé. Chaque rangement s'annule depui
               "Vos réponses restent sur cet ordinateur.",
               "Seul un extrait des fichiers est envoyé à l'IA, jamais le fichier entier.")
 MODE_CHOICES = (
-    ("personal", "Particulier", "Vos papiers, factures, bulletins de paie, photos… rangés par catégorie, puis dans "
-                                "des sous-dossiers si besoin. Si aucune catégorie ne convient, TriBin en crée une."),
-    ("work", "Professionnel (agence, studio)", "Les fichiers de l'équipe, rangés par client, année, projet et catégorie "
-                                          "selon la convention de l'équipe."),
+    ("personal", "Particulier", "Papiers, factures, photos… rangés par catégorie."),
+    ("work", "Professionnel (agence, studio)", "Fichiers d'équipe, rangés par client, année et projet."),
 )
 # (clé, nom, description, où créer la clé, recommandé)
-PROVIDERS = (("mistral", "Mistral AI", "Hébergée en Europe. L'IA par défaut de TriBin, testée sur des dossiers d'agence.",
-              "console.mistral.ai", True),
-             ("anthropic", "Claude (Anthropic)", "Les modèles Claude d'Anthropic.", "console.anthropic.com", False),
-             ("gemini", "Gemini (Google)", "Les modèles Gemini de Google, avec une offre gratuite limitée.",
-              "aistudio.google.com", False))
+PROVIDERS = (("mistral", "Mistral AI", "", "console.mistral.ai", True),
+             ("anthropic", "Claude (Anthropic)", "", "console.anthropic.com", False),
+             ("gemini", "Gemini (Google)", "", "aistudio.google.com", False))
 
 
 class ChipGroup(QWidget):

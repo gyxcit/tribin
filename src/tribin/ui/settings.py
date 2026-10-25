@@ -83,7 +83,7 @@ PAGES = (("folders", "Dossiers", "folder"), ("filing", "Rangement", "files"),
 class SettingsPage(QScrollArea):
     """Page de réglages : titre, phrase d'introduction, puis une ligne par réglage."""
 
-    def __init__(self, title: str, lead: str):
+    def __init__(self, title: str, lead: str = ""):
         super().__init__()
         self.setWidgetResizable(True)
         self.setFrameShape(QFrame.Shape.NoFrame)
@@ -95,8 +95,9 @@ class SettingsPage(QScrollArea):
         heading = QLabel(title)
         heading.setObjectName("Title")
         self.body.addWidget(heading)
-        self.body.addSpacing(4)
-        self.body.addWidget(muted(lead))
+        if lead:
+            self.body.addSpacing(4)
+            self.body.addWidget(muted(lead))
         self.body.addSpacing(20)
         self.setWidget(content)
 
@@ -214,20 +215,19 @@ class SettingsDialog(QDialog):
 
     def _folders_page(self) -> SettingsPage:
         cfg = self.c.service.config
-        page = SettingsPage("Dossiers", "Le mode d'utilisation et les dossiers que TriBin peut ranger.")
+        page = SettingsPage("Dossiers")
         self.initial_mode = current_mode(self.c.service)
         self.mode_group = QButtonGroup(self)
         self.mode_cards: dict[str, ChoiceCard] = {}
         cards = []
-        for key, title, description in MODE_CHOICES:
-            card = ChoiceCard(title, description)
+        for key, title, _ in MODE_CHOICES:
+            card = ChoiceCard(title, "")
             card.radio.setProperty("mode", key)
             self.mode_group.addButton(card.radio)
             self.mode_cards[key] = card
             cards.append(card)
         self.mode_cards[self.initial_mode].radio.setChecked(True)
-        page.add_row("Utilisation", "Chaque mode a ses propres dossiers et sa convention ; rien n'est déplacé.",
-                     column(*cards))
+        page.add_row("Utilisation", "", column(*cards))
         # dossiers de chaque mode, tels qu'affichés (changer de mode puis revenir ne perd rien)
         self.shown_mode = self.initial_mode
         self.mode_stash = {self.initial_mode: {"roots": list(cfg.roots), "local_excluded": list(cfg.local_excluded),
@@ -235,15 +235,15 @@ class SettingsDialog(QDialog):
         for card in self.mode_cards.values():
             card.radio.toggled.connect(lambda checked: checked and self._mode_switched())
         self.roots = roots_picker(cfg.roots)
-        page.add_row("Dossiers à ranger", "TriBin ne range que dans ces dossiers.", self.roots)
+        page.add_row("Dossiers à ranger", "", self.roots)
         self.excluded = excluded_picker(cfg.local_excluded, self.roots.values)
-        page.add_row("Dossiers à ne jamais toucher", "Rien n'y est déplacé ni renommé.", self.excluded)
+        page.add_row("Dossiers à ne jamais toucher", "", self.excluded)
         return page
 
     def _filing_page(self) -> SettingsPage:
         """Comment ranger : convention, profondeur des dossiers (mode personnel) et rangement automatique."""
         cfg = self.c.service.config
-        page = SettingsPage("Rangement", "La façon de ranger, la profondeur des dossiers et le rangement automatique.")
+        page = SettingsPage("Rangement")
         conv_row = QHBoxLayout()
         self.convention = QLineEdit(cfg.convention_path)
         browse = QPushButton("Parcourir…")
@@ -253,19 +253,13 @@ class SettingsDialog(QDialog):
         remap = QPushButton("Réanalyser les dossiers")
         remap.setToolTip("Relit la structure des dossiers à ranger (après une réorganisation, par exemple).")
         remap.clicked.connect(self.c.remap)
-        page.add_row("Convention de rangement", "Vos catégories et la façon de nommer les fichiers."
-                     if self.initial_mode == "personal" else "Fichier partagé par l'équipe, sur cet ordinateur ou le NAS.",
-                     column(conv_row, remap))
-        page.add_row("Nom des fichiers", "TriBin renomme chaque fichier rangé selon la convention.",
-                     self._naming_box())
+        page.add_row("Convention de rangement", "", column(conv_row, remap))
+        page.add_row("Nom des fichiers", "", self._naming_box())
         self.depth_buttons = QButtonGroup(self)
         self.initial_depth = self._current_depth()
         if self.initial_mode == "personal":
-            page.add_row("Profondeur des dossiers", "Combien de niveaux l'IA peut utiliser dans une catégorie : "
-                         "elle range à la racine de la catégorie ou dans un sous-dossier, selon le fichier.",
-                         self._depth_box())
-        page.add_row("Rangement automatique", "TriBin range tout seul les fichiers dont l'IA est assez sûre. "
-                     "Les autres attendent votre avis : TriBin vous prévient.", self._auto_box(cfg))
+            page.add_row("Profondeur des dossiers", "", self._depth_box())
+        page.add_row("Rangement automatique", "", self._auto_box(cfg))
         return page
 
     def _naming_box(self) -> QWidget:
@@ -292,7 +286,7 @@ class SettingsDialog(QDialog):
         self.name_example.setFont(mono_font())
         layout.addWidget(self.name_example)
         if self.initial_mode == "work":
-            layout.addWidget(muted("Modifie la convention de l'équipe : à décider ensemble."))
+            layout.addWidget(muted("Modifie la convention de toute l'équipe."))
         self.date_start.toggled.connect(lambda on: self._date_switched(self.date_start, on))
         self.date_end.toggled.connect(lambda on: self._date_switched(self.date_end, on))
         self._naming_changed()
@@ -340,9 +334,7 @@ class SettingsDialog(QDialog):
         self.depth_example = QLabel()
         self.depth_example.setFont(mono_font())
         self.depth_example.setWordWrap(True)  # sinon l'exemple à 5 niveaux élargit toute la colonne (et le curseur)
-        self.depth_hint = muted()
         layout.addWidget(self.depth_example)
-        layout.addWidget(self.depth_hint)
         self.depth_buttons.idClicked.connect(lambda _: self._depth_changed())
         self._depth_changed()
         return box
@@ -353,9 +345,6 @@ class SettingsDialog(QDialog):
     def _depth_changed(self) -> None:
         depth = self.depth()
         self.depth_example.setText("Exemple : " + " › ".join(DEPTH_EXAMPLE[:depth]))
-        self.depth_hint.setText({1: "Tous les fichiers d'une catégorie au même niveau.",
-                                 2: "Un niveau de sous-dossiers : type de document."}.get(
-            depth, "Recommandé : l'IA ne crée un sous-dossier que s'il regroupera des fichiers semblables."))
 
     def _auto_box(self, cfg) -> QWidget:
         """Interrupteur, curseur du seuil de confiance et phrase qui explique ce que fait ce seuil."""
@@ -377,7 +366,7 @@ class SettingsDialog(QDialog):
         self.threshold = ThresholdSlider(round((cfg.auto_min_confidence or AUTO_MIN_CONFIDENCE) * 100))
         layout.addWidget(self.threshold)
         scale = QHBoxLayout()
-        for text in ("60 % · plus de fichiers rangés seuls", "95 % · seulement les plus sûrs"):
+        for text in ("60 % · plus de fichiers", "95 % · plus prudent"):
             label = muted(text, name="Faint", wrap=False)
             scale.addWidget(label)
             if text.startswith("60"):
@@ -385,10 +374,6 @@ class SettingsDialog(QDialog):
         layout.addLayout(scale)
         self.threshold_hint = muted()
         layout.addWidget(self.threshold_hint)
-        personal = self.initial_mode == "personal"
-        layout.addWidget(muted(("En mode Particulier, une catégorie ou un sous-dossier manquant (dans la limite de la "
-                                "profondeur) est créé sans demander. " if personal else "Un fichier qui demanderait un nouveau dossier attend "
-                                "toujours votre accord. ") + "Tout rangement s'annule depuis l'Historique."))
         self.auto_file.toggled.connect(lambda _: self._auto_changed())
         self.threshold.changed.connect(lambda _: self._auto_changed())
         self._auto_changed()
@@ -399,46 +384,44 @@ class SettingsDialog(QDialog):
         value = self.threshold.value()
         self.auto_state.setText("Activé" if on else "Désactivé")
         self.threshold.setEnabled(on)
-        if not on:
-            self.threshold_hint.setText("Activez le rangement automatique pour régler le seuil.")
-        elif value >= 80:
-            self.threshold_hint.setText(f"Rangés seuls : les fichiers « sûrs » (confiance d'au moins {value} %).")
-        else:
-            self.threshold_hint.setText(f"Rangés seuls dès {value} % de confiance, y compris des fichiers « à "
-                                        "regarder » : quelques erreurs possibles, toutes annulables.")
+        risky = on and value < 80
+        self.threshold_hint.setText("Quelques erreurs possibles, toutes annulables depuis l'Historique."
+                                    if risky else "")
+        self.threshold_hint.setVisible(risky)
 
     def _ai_page(self) -> SettingsPage:
         svc = self.c.service
         ai_settings = svc.ai_settings()
-        page = SettingsPage("Intelligence artificielle", "Le service qui propose le dossier et le nom de chaque fichier.")
+        page = SettingsPage("Intelligence artificielle")
         self.provider_group = QButtonGroup(self)
         self.provider_cards: dict[str, ChoiceCard] = {}
         cards = []
-        for key, name, description, _, recommended in PROVIDERS:
-            card = ChoiceCard(name, description, "Recommandé" if recommended else "")
+        for key, name, _, _, recommended in PROVIDERS:
+            card = ChoiceCard(name, "", "Recommandé" if recommended else "")
             card.radio.setProperty("provider", key)
             card.radio.toggled.connect(lambda checked: checked and self._provider_changed())
             self.provider_group.addButton(card.radio)
             self.provider_cards[key] = card
             cards.append(card)
-        page.add_row("Fournisseur", "Vous pouvez en changer à tout moment.", column(*cards))
+        page.add_row("Fournisseur", "", column(*cards))
         self.model = QComboBox()
         self.model.setEditable(True)
         self.model.setMinimumWidth(260)
         model_row = QHBoxLayout()
         model_row.addWidget(self.model)
         model_row.addStretch()
-        page.add_row("Modèle", "Le modèle par défaut convient dans la plupart des cas.", column(model_row))
+        page.add_row("Modèle", "", column(model_row))
         self.api_key = ApiKeyField()
-        page.add_row("Clé API", "Rangée dans le trousseau de l'ordinateur, jamais dans un fichier partagé.",
-                     self.api_key)
+        page.add_row("Clé API", "", self.api_key)
         privacy = QPushButton("Politique de confidentialité")
         privacy.setObjectName("Link")
         privacy.setIcon(line_icon("open", "#3B4CCA", 14))
         privacy.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         privacy.clicked.connect(open_privacy_policy)
-        page.add_row("Confidentialité", "Seul un extrait des fichiers est envoyé à l'IA, jamais le fichier entier.",
-                     column(privacy))
+        privacy_row = QHBoxLayout()  # à gauche comme les autres boutons (la flèche à droite inverse l'alignement)
+        privacy_row.addWidget(privacy)
+        privacy_row.addStretch()
+        page.add_row("Confidentialité", "", column(privacy_row))
         current = ai_settings.provider if ai_settings.provider in self.provider_cards else "mistral"
         self.provider_cards[current].radio.setChecked(True)
         self._provider_changed()
@@ -447,15 +430,14 @@ class SettingsDialog(QDialog):
 
     def _learning_page(self) -> SettingsPage:
         svc = self.c.service
-        page = SettingsPage("Apprentissage", "Ce que TriBin sait de vous, et les règles qu'il suit : apprises de vos "
-                            "corrections, confirmées par vos validations ou ajoutées par vous.")
+        page = SettingsPage("Apprentissage")
         try:
             text = svc.settings.profile_path.read_text(encoding="utf-8")
         except OSError:
             text = ""
         self.profile = QPlainTextEdit(text)
         self.profile.setMinimumHeight(140)
-        page.add_row("Profil", "Inclus dans chaque demande à l'IA. Modifiable librement.", self.profile)
+        page.add_row("Profil", "Envoyé à l'IA avec chaque fichier.", self.profile)
         from tribin.ui.rules_view import RulesEditor
 
         alerts = team_rule_alerts(svc.db)
@@ -465,41 +447,36 @@ class SettingsDialog(QDialog):
             warning.setWordWrap(True)
             page.add_wide("Règles d'équipe souvent corrigées", "", warning)
         self.rules = RulesEditor(self.c)
-        page.add_wide("Règles", "Cliquez sur une règle pour voir sa logique. L'interrupteur l'active ou la met de côté ; "
-                      "les règles actives sont données à l'IA à chaque proposition.", self.rules)
+        page.add_wide("Règles", "", self.rules)
         return page
 
     def _system_page(self) -> SettingsPage:
         journal_dir = self.c.service.settings.journal_dir
-        page = SettingsPage("Système", "Raccourcis pour déposer des fichiers, et journal des opérations.")
+        page = SettingsPage("Système")
         self.context_menu = QPushButton()
         self.context_menu.clicked.connect(self._toggle_context_menu)
         self.context_menu.setEnabled(sys.platform == "win32")
         self._refresh_context_menu()
-        page.add_row("Clic droit", "« Trier avec TriBin » sur n'importe quel fichier. Sous Windows 11, Maj + clic droit "
-                     "l'affiche directement (sinon : « Afficher d'autres options »).", column(self.context_menu))
+        page.add_row("Clic droit", "Windows 11 : Maj + clic droit pour l'afficher directement.",
+                     column(self.context_menu))
         self.hotkey = QCheckBox(f"{HOTKEY_LABEL} envoie à TriBin les fichiers sélectionnés")
         self.hotkey.setChecked(self.c.service.config.hotkey)
         self.hotkey.setEnabled(sys.platform == "win32")
-        page.add_row("Raccourci clavier", "Sélectionnez des fichiers dans l'Explorateur, puis appuyez sur "
-                     f"{HOTKEY_LABEL} : ils partent dans TriBin, même si l'application est en arrière-plan.",
-                     column(self.hotkey))
+        page.add_row("Raccourci clavier", "", column(self.hotkey))
         sendto = QPushButton("Ajouter « Envoyer vers › TriBin » au clic droit")
         sendto.clicked.connect(lambda: self._integrate(system_integration.install_sendto))
         desktop = QPushButton("Créer un raccourci TriBin sur le bureau")
         desktop.clicked.connect(lambda: self._integrate(system_integration.install_desktop_shortcut))
         for button in (sendto, desktop):
             button.setEnabled(sys.platform == "win32")
-        help_text = ("Glissez des fichiers sur le raccourci, ou faites un clic droit sur un fichier."
-                     if sys.platform == "win32" else "Disponible sous Windows. Sous macOS, glissez sur l'icône du Dock.")
-        page.add_row("Raccourcis", help_text, column(sendto, desktop))
+        page.add_row("Raccourcis", "" if sys.platform == "win32" else "Disponible sous Windows.",
+                     column(sendto, desktop))
         path = QLabel(str(journal_dir))
         path.setWordWrap(True)
         path.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         open_dir = QPushButton("Ouvrir le dossier")
         open_dir.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(journal_dir))))
-        page.add_row("Journal des opérations", "Chaque opération y est notée avant d'être faite : il permet de "
-                     "tout retrouver, même si l'application ne s'ouvre plus.", column(path, open_dir))
+        page.add_row("Journal des opérations", "", column(path, open_dir))
         return page
 
     # --- actions ------------------------------------------------------------------------------
