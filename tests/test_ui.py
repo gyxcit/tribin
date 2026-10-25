@@ -167,7 +167,7 @@ def test_batch_shows_simulation_then_history_and_undo(qapp, controller, monkeypa
     controller.bin_window.show_page("history")
     labels = [w.text() for w in history.findChildren(QLabel)]
     assert any("2 fichiers rangés" in t for t in labels)
-    assert any("2 propositions acceptées telles quelles" in t for t in labels)
+    assert any("Proposition de l'IA acceptée telle quelle" in t for t in labels)  # détail d'un fichier
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
     undo = next(b for b in history.findChildren(QPushButton) if "Annuler le lot" in b.text())
     undo.click()
@@ -492,18 +492,25 @@ def test_history_reveal_button(qapp, controller, monkeypatch):
     assert wait(qapp, placed.exists)
     history = controller.bin_window.history
     controller.bin_window.show_page("history")
-    buttons = [b for b in history.findChildren(QPushButton) if b.text() == "Afficher" and b.isEnabled()]
+    buttons = [b for b in history.findChildren(QPushButton) if b.text().startswith("Afficher") and b.isEnabled()]
     assert buttons
     for button in buttons:
         button.click()
     assert placed in shown  # le fichier rangé, sélectionné dans l'Explorateur
 
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
-    next(b for b in history.findChildren(QPushButton) if "Annuler le lot" in b.text()).click()
+    next(b for b in history.findChildren(QPushButton) if b.text() == "Annuler ce rangement").click()
     shown.clear()
-    qapp.processEvents()  # anciens boutons (avant l'annulation) détruits
+    from tribin.ui.history import ExpandableRow
+
+    def in_visible_row(button):  # les lignes d'avant l'annulation sont masquées en attendant leur destruction
+        parent = button.parent()
+        while parent is not None and not isinstance(parent, ExpandableRow):
+            parent = parent.parent()
+        return parent is not None and parent.isVisibleTo(history)
+
     for button in [b for b in history.findChildren(QPushButton)
-                   if b.text() == "Afficher" and b.isEnabled() and b.isVisibleTo(history)]:
+                   if b.text().startswith("Afficher") and b.isEnabled() and in_visible_row(b)]:
         button.click()
     assert placed not in shown and any(p.name == "2026-10-12_ACME_2026-042_Devis-impression.pdf" or
                                        p.name == "scan0042.pdf" for p in shown)  # là où il est revenu
@@ -532,3 +539,69 @@ def test_context_menu_install_and_remove():
             except OSError:
                 pass
     assert not si.context_menu_installed(key)
+
+
+def test_hotkey_selection_parsing(tmp_path):
+    from tribin.ui.hotkey import GROUP_SEPARATOR, explorer_selection, parse_selection
+
+    out = "\n".join(["C:/a/un.pdf", "C:/a/deux.pdf", GROUP_SEPARATOR, ""])
+    assert parse_selection(out) == [[Path("C:/a/un.pdf"), Path("C:/a/deux.pdf")]]
+    assert len(parse_selection(f"x\n{GROUP_SEPARATOR}\ny\n{GROUP_SEPARATOR}\n")) == 2  # deux onglets
+    assert explorer_selection(0) == ([], explorer_selection(0)[1]) and explorer_selection(0)[1]
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="raccourci global : Windows")
+def test_global_hotkey_registers_and_fires(qapp):
+    import ctypes
+    from ctypes import wintypes
+
+    from tribin.ui.hotkey import MOD_ALT, MOD_CONTROL, MOD_SHIFT, WM_HOTKEY, GlobalHotkey
+
+    if qapp.platformName() != "windows":
+        pytest.skip("affichage hors écran : pas de vraie fenêtre Windows pour RegisterHotKey")
+    hotkey = GlobalHotkey()
+    fired = []
+    hotkey.triggered.connect(lambda: fired.append(True))
+    try:
+        assert hotkey.register(MOD_CONTROL | MOD_ALT | MOD_SHIFT, 0x7B)  # Ctrl+Alt+Maj+F12 : libre pour le test
+        msg = wintypes.MSG(hwnd=int(hotkey.winId()), message=WM_HOTKEY, wParam=GlobalHotkey.HOTKEY_ID)
+        assert hotkey.nativeEvent(b"windows_generic_MSG", ctypes.addressof(msg))[0]
+        assert fired == [True]
+    finally:
+        hotkey.unregister()
+        hotkey.deleteLater()
+    assert not hotkey.registered
+
+
+def test_history_rows_expand_and_home_shows_stats(qapp, controller):
+    from tribin.ui.history import ExpandableRow
+
+    controller.drop_paths([controller.sb / "inbox" / "scan0042.pdf", controller.sb / "inbox" / "BC_4512.pdf"])
+    assert wait(qapp, lambda: ready_items(controller, 2))
+    controller.confirm_simulation = lambda report: True
+    controller.refresh_queue()
+    controller.bin_window.validate_all()
+    assert wait(qapp, lambda: not controller.service.pending())
+    win = controller.bin_window
+
+    win.show_page("history")
+    rows = [r for r in win.history.findChildren(ExpandableRow) if r.isVisibleTo(win.history)]
+    assert len(rows) == 2 and not rows[0].details.isVisibleTo(rows[0])
+    names = {r.name.toolTip() for r in rows}
+    assert any("Devis-impression" in n for n in names), names  # le nom du fichier rangé, en tête de ligne
+    rows[0].toggle()  # clic : détails dépliés (date, dossier, catégorie, confiance, décision)
+    assert rows[0].details.isVisibleTo(rows[0])
+    texts = [w.text() for w in rows[0].details.findChildren(QLabel)]
+    assert {"Rangé le", "Dossier", "Catégorie", "Confiance de l'IA", "Décision"} <= set(texts)
+    assert any("90 %" in t for t in texts)
+    win.history.reload()  # l'état déplié est conservé
+    qapp.processEvents()
+    reopened = [r for r in win.history.findChildren(ExpandableRow) if r.isVisibleTo(win.history) and r.expanded]
+    assert len(reopened) == 1
+
+    win.show_page("home")
+    home = win.home
+    assert home.cards["filed"].target == 2 and home.cards["rate"].target == 100
+    assert "Bonjour" in home.greeting.text() or "Bonsoir" in home.greeting.text()
+    recent = [w for w in home.findChildren(QLabel) if "Devis-impression" in w.toolTip() and w.isVisibleTo(home)]
+    assert recent  # parmi les 5 derniers rangements

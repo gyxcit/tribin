@@ -69,8 +69,14 @@ class BinWindow(QMainWindow):
         root.setSpacing(0)
         root.addWidget(self._sidebar())
         self.pages = QStackedWidget()
-        self.pages.addWidget(self._bin_page())
         from tribin.ui.history import HistoryView
+        from tribin.ui.home import HomeView
+
+        self.home = HomeView(controller)
+        self.home.open_queue.connect(lambda: self.show_page("bin"))
+        self.home.open_history.connect(lambda: self.show_page("history"))
+        self.pages.addWidget(self.home)
+        self.pages.addWidget(self._bin_page())
 
         self.history = HistoryView(controller)
         self.pages.addWidget(self.history)
@@ -108,7 +114,8 @@ class BinWindow(QMainWindow):
         col.addLayout(brand_row)
         self.nav = QButtonGroup(self)
         self.nav_buttons: dict[str, QPushButton] = {}
-        for key, label, icon in (("bin", "À ranger", "inbox"), ("history", "Historique", "history")):
+        for key, label, icon in (("home", "Accueil", "home"), ("bin", "À ranger", "inbox"),
+                                 ("history", "Historique", "history")):
             button = nav_item(label, icon, checkable=True)
             button.clicked.connect(lambda _=False, k=key: self.show_page(k))
             self.nav.addButton(button)
@@ -131,7 +138,7 @@ class BinWindow(QMainWindow):
         self.ai_chip.setObjectName("AiStatus")
         self.ai_chip.setTextFormat(Qt.TextFormat.RichText)
         col.addWidget(self.ai_chip)
-        self.nav_buttons["bin"].setChecked(True)
+        self.nav_buttons["home"].setChecked(True)  # la fenêtre s'ouvre sur l'Accueil
         return side
 
     def _bin_page(self) -> QWidget:
@@ -187,6 +194,9 @@ class BinWindow(QMainWindow):
         if key == "history":
             self.history.reload()
             self.pages.setCurrentWidget(self.history)
+        elif key == "home":
+            self.home.reload()
+            self.pages.setCurrentWidget(self.home)
         else:
             self.pages.setCurrentWidget(self.bin_pages)
 
@@ -204,6 +214,8 @@ class BinWindow(QMainWindow):
         self.pending_count.setText(str(len(items)) if items else "")
         self._update_ai_chip()
         self.bin_pages.setCurrentIndex(1 if items or self.aside else 0)
+        if self.pages.currentWidget() is self.home:
+            self.home.reload()  # compteurs et derniers rangements à jour
         self.queue.set_items(items, current, self.aside)
 
     def _update_ai_chip(self) -> None:

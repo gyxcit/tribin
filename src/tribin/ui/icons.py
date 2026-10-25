@@ -73,6 +73,14 @@ LINE_ICONS = {
     "pause": '<rect x="5" y="4" width="4" height="16" rx="1"/><rect x="15" y="4" width="4" height="16" rx="1"/>',
     "brain": '<path d="M4 19.5V5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-1.5z"/><path d="M8 7h6M8 11h6"/>',
     "monitor": '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
+    "home": '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/>',
+    "edit": '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+    "bolt": '<path d="M13 2 3 14h9l-1 8 10-12h-9z"/>',
+    "files": '<path d="M15 2H8a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z"/><path d="M15 2v5h5"/>'
+             '<path d="M4 6v14a2 2 0 0 0 2 2h10"/>',
+    "chevron-right": '<path d="m9 6 6 6-6 6"/>',
+    "chevron-down": '<path d="m6 9 6 6 6-6"/>',
+    "arrow-right": '<path d="M5 12h14"/><path d="m13 6 6 6-6 6"/>',
 }
 
 

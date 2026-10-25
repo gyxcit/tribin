@@ -40,6 +40,7 @@ from tribin.service.profile import PRIVACY_NOTICE, save_profile
 from tribin.ui import system_integration
 from tribin.ui.components import ApiKeyField, ChoiceCard, divider, muted, section
 from tribin.ui.folder_picker import excluded_picker, roots_picker
+from tribin.ui.hotkey import HOTKEY_LABEL
 from tribin.ui.icons import line_icon
 from tribin.ui.onboarding import MODE_CHOICES, PROVIDERS
 
@@ -280,6 +281,12 @@ class SettingsDialog(QDialog):
         self._refresh_context_menu()
         page.add_row("Clic droit", "« Trier avec TriBin » sur n'importe quel fichier. Sous Windows 11, Maj + clic droit "
                      "l'affiche directement (sinon : « Afficher d'autres options »).", column(self.context_menu))
+        self.hotkey = QCheckBox(f"{HOTKEY_LABEL} envoie à TriBin les fichiers sélectionnés")
+        self.hotkey.setChecked(self.c.service.config.hotkey)
+        self.hotkey.setEnabled(sys.platform == "win32")
+        page.add_row("Raccourci clavier", "Sélectionnez des fichiers dans l'Explorateur, puis appuyez sur "
+                     f"{HOTKEY_LABEL} : ils partent dans TriBin, même si l'application est en arrière-plan.",
+                     column(self.hotkey))
         sendto = QPushButton("Ajouter « Envoyer vers › TriBin » au clic droit")
         sendto.clicked.connect(lambda: self._integrate(system_integration.install_sendto))
         desktop = QPushButton("Créer un raccourci TriBin sur le bureau")
@@ -379,6 +386,7 @@ class SettingsDialog(QDialog):
             cfg.convention_path = str(path)
             QMessageBox.information(self, "TriBin", note)
         cfg.auto_file = self.auto_file.isChecked()
+        cfg.hotkey = self.hotkey.isChecked()
         provider = self.provider()
         cfg.provider = provider
         cfg.model = self.model.currentText().strip()

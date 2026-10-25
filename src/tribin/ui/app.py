@@ -68,6 +68,8 @@ class AppController:
         self.drop_widget.auto_clicked.connect(self.auto_file_ready)
         self.tray = Tray(self)
         self._tasks: set = set()
+        self.show_ui = show_ui
+        self.hotkey = None  # raccourci clavier global, créé au démarrage (jamais pendant les tests)
         self._notice = {"done": 0, "review": []}  # rangés automatiquement / laissés pour avis, à annoncer
         self._notice_timer = QTimer()
         self._notice_timer.setSingleShot(True)
@@ -225,7 +227,10 @@ class AppController:
     # --- fenêtres -----------------------------------------------------------------------------
 
     def show_bin(self) -> None:
+        """Ouvre la fenêtre : sur « À ranger » s'il y a des fichiers en attente, sinon là où elle était."""
         self.refresh_queue()
+        if self.service.pending():
+            self.bin_window.show_page("bin")
         self.bin_window.show()
         self.bin_window.raise_()
         self.bin_window.activateWindow()
@@ -243,6 +248,7 @@ class AppController:
         from tribin.ui.settings import SettingsDialog
 
         if SettingsDialog(self).exec():
+            self.apply_hotkey()
             self.retry_without_ai()
             self.refresh_queue()
 
@@ -297,6 +303,40 @@ class AppController:
         if initial_paths:
             self.drop_paths(initial_paths)
             self.show_bin()
+        self.apply_hotkey()
+
+    # --- raccourci clavier global ---------------------------------------------------------------
+
+    def apply_hotkey(self) -> None:
+        """Active ou coupe Ctrl + Alt + T selon les réglages (Windows, application visible seulement)."""
+        if not self.show_ui or sys.platform != "win32":
+            return
+        from tribin.ui.hotkey import GlobalHotkey
+
+        if self.hotkey is None:
+            self.hotkey = GlobalHotkey()
+            self.hotkey.triggered.connect(self._hotkey_pressed)
+        if self.service.config.hotkey:
+            self.hotkey.register()
+        else:
+            self.hotkey.unregister()
+
+    def _hotkey_pressed(self) -> None:
+        from tribin.ui.hotkey import explorer_selection, foreground_window
+
+        hwnd = foreground_window()  # tout de suite : la fenêtre au premier plan au moment de l'appui
+
+        def done(result) -> None:
+            paths, message = result
+            if paths:
+                self.drop_paths(paths)
+                n = len(paths)
+                self.tray.showMessage("TriBin", f"{n} fichier{'s' if n > 1 else ''} envoyé{'s' if n > 1 else ''} "
+                                                "à TriBin.")
+            else:
+                self.tray.showMessage("TriBin", message)
+
+        self._run(explorer_selection, hwnd, on_done=done)
 
     def quit(self) -> None:
         self.app.quit()

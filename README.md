@@ -8,6 +8,11 @@ Spécification complète et état d'avancement : [SPEC.md](SPEC.md).
 
 <p align="center"><img src="docs/screenshots/logo.png" width="96" alt="Logo TriBin"></p>
 
+**Accueil** : bannière, chiffres clés animés (fichiers rangés, part rangée sans correction, corrections faites
+par vous, rangements automatiques) et les 5 derniers rangements, à ouvrir ou afficher dans l'Explorateur.
+
+![Accueil](docs/screenshots/accueil.png)
+
 **Fenêtre principale**, en trois colonnes : la navigation ; les fichiers à ranger, groupés en « À vérifier » et
 « Prêts à ranger », avec recherche et onglets ; puis la proposition de l'IA pour le fichier sélectionné : nouveau
 nom, dossier, catégorie, confiance (turquoise = sûr, ambre = à regarder, corail = à vérifier), explication et autres
@@ -19,7 +24,7 @@ possibilités. Les actions sont en bas : « Ranger ici » (Entrée), « Passer �
 |---|---|
 | ![Fichier à vérifier](docs/screenshots/corbeille-a-verifier.png) | ![Simulation](docs/screenshots/simulation.png) |
 
-| Historique (par lot, tout est annulable) | Tout est rangé |
+| Historique (fichier par fichier, détails dépliables, tout est annulable) | Tout est rangé |
 |---|---|
 | ![Historique](docs/screenshots/historique.png) | ![Corbeille vide](docs/screenshots/corbeille-vide.png) |
 
@@ -122,6 +127,10 @@ fichier déjà prêt), quelques questions facultatives, choix de l'IA. Ensuite :
 - Windows : glisser sur le raccourci du bureau, ou clic droit **Envoyer vers > TriBin** (à créer dans
   Réglages › Système) ;
 - macOS (application empaquetée) : glisser sur l'icône du Dock.
+
+**Raccourci clavier** (Windows) : sélectionnez des fichiers dans l'Explorateur et appuyez sur **Ctrl + Alt + T** :
+ils partent dans TriBin, même si l'application est en arrière-plan (désactivable dans Réglages › Système). Le clic
+droit propose aussi « Trier avec TriBin » (Réglages › Système ; Maj + clic droit sous Windows 11).
 
 Depuis le widget, « Ranger les N prêts » range les fichiers prêts sans ouvrir la fenêtre. Dans Réglages › Dossiers,
 le **rangement automatique** (désactivé par défaut) range tout seul les fichiers dont l'IA est sûre (confiance d'au

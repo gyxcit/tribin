@@ -92,6 +92,7 @@ def main() -> None:
     window = controller.bin_window
     controller.refresh_queue()
     by_name = {Path(i.original_path).name: i for i in service.pending()}
+    window.show_page("bin")
     window.select_file(by_name["affiche_noel_v2.psd"].file_id)
     save(window, "corbeille.png", (1240, 780))
     window.select_file(by_name["IMG_3381.jpg"].file_id)
@@ -108,6 +109,12 @@ def main() -> None:
     save(SimulationDialog(prepared.report), "simulation.png", (860, 640))
     service.commit(prepared)
     controller.refresh_queue()
+    window.show_page("home")
+    save(window, "accueil.png")
+    from tribin.safety.journal import Journal
+    from tribin.service.activity import placements
+
+    window.history.expanded.add(placements(Journal(service.settings.journal_dir))[0].operation_id)
     window.show_page("history")
     save(window, "historique.png")
     window.show_page("bin")

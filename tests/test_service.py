@@ -254,3 +254,19 @@ def test_personal_mode_uses_existing_category_and_work_mode_never_invents(settin
     work = service(settings, sb, llm=fixed(category="Animaux", target_folder="ACME/2027/X/Animaux", confidence=0.9))
     other = work.analyze(work.drop(sb / "inbox" / "BC_4512.pdf").file_id)
     assert other.proposal.new_category is None  # mode travail : jamais de catégorie inventée
+
+
+def test_activity_statistics():
+    from datetime import date, datetime
+
+    from tribin.service.activity import Placement, compute_stats
+
+    def item(decision, status="done", when=datetime(2026, 10, 3)):
+        return Placement("o", "b", when, "f.pdf", "f.pdf", Path("r/A/2026/f.pdf"), None, "A/2026", "A", 0.9,
+                         decision, status)
+
+    stats = compute_stats([item("accepted"), item("auto"), item("edited"), item("alternative_chosen"),
+                           item("accepted", "undone"), item("reorganisation"),
+                           item("accepted", when=datetime(2026, 9, 1))], today=date(2026, 10, 25))
+    assert (stats.filed, stats.this_month, stats.accepted, stats.auto, stats.corrected, stats.undone) == (5, 4, 2, 1, 2, 1)
+    assert stats.without_correction == 3 / 5
