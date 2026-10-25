@@ -10,7 +10,7 @@ from pathlib import Path
 from tribin.config import STAGING_DIRNAME, Settings, is_within, read_api_key
 from tribin.convention.loader import Convention, ConventionError, load_convention
 from tribin.db import Database
-from tribin.convention.structure import matches_template
+from tribin.convention.structure import matches_template, personal_folder_ok
 from tribin.engine.context import folder_signature, make_context
 from tribin.engine.proposer import ProposeContext, has_placeholder, propose
 from tribin.extract import extract
@@ -326,7 +326,8 @@ class BinService:
             batch.move(Choice(Path(item.staged_path), Path(item.root), v.target_folder, v.new_name, meta))
             convention = self.convention()
             if convention.personal and ((p.new_category and v.target_folder.split("/")[0] == p.new_category)
-                                        or matches_template(v.target_folder, convention)):
+                                        or matches_template(v.target_folder, convention)
+                                        or personal_folder_ok(v.target_folder, convention)):
                 parts = v.target_folder.split("/")
                 trusted |= {Path(item.root).joinpath(*parts[:i]) for i in range(1, len(parts) + 1)}
         return Prepared(batch, executor.simulate(batch.ops), validations, frozenset(trusted))

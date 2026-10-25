@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 PROMPT_VERSION = "p5"
+PERSONAL_PROMPT_VERSION = "p6-perso"
 
 SYSTEM_PROMPT = """Tu es l'assistant de rangement de fichiers d'une équipe. Ta mission : proposer
 le dossier où ranger un fichier et les éléments de son nouveau nom, en respectant
@@ -55,18 +56,25 @@ Mode personnel (papiers et fichiers d'une personne, pas d'une agence) :
 - Si AUCUNE catégorie ne convient vraiment, crée-en une : category = nom court
   en français, 1 ou 2 mots, sans accent (ex. « Animaux », « Voyages »). N'en
   crée pas si une catégorie existante convient, même approximativement.
-- target_folder suit le gabarit (catégorie puis année du document).
+- target_folder : la catégorie, puis AU PLUS {subs} niveau(x) de sous-dossiers ({depth} niveaux au total).
+  Réutilise d'abord les sous-dossiers existants (liste des candidats). Crée un sous-
+  dossier quand il regroupe un type de document qui reviendra, du plus général au
+  plus précis (ex. « Etudes/Certifications/Universite », « Etudes/Attestations/
+  Benevolat ») ; sinon range directement dans la catégorie (« Etudes »). Pas de
+  dossier par année, sauf s'il existe déjà pour ce type de document.
 - confidence : 0.85 à 0.95 si la nature du document correspond clairement à une
   catégorie (existante ou créée) ; 0.6 à 0.8 si deux catégories sont plausibles ;
   moins de 0.6 si tu ne comprends pas le document."""
 
 
-def system_prompt(personal: bool) -> str:
-    return SYSTEM_PROMPT + (PERSONAL_RULES if personal else "")
+def system_prompt(personal: bool, depth: int = 3) -> str:
+    if not personal:
+        return SYSTEM_PROMPT
+    return SYSTEM_PROMPT + PERSONAL_RULES.replace("{subs}", str(max(0, depth - 1))).replace("{depth}", str(depth))
 
 
 def prompt_version(personal: bool) -> str:
-    return f"{PROMPT_VERSION}-perso" if personal else PROMPT_VERSION
+    return PERSONAL_PROMPT_VERSION if personal else PROMPT_VERSION
 
 
 RESPONSE_FORMAT = """{

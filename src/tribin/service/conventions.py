@@ -86,6 +86,14 @@ def create_convention(mode: str, roots: list[str], data_dir: Path) -> tuple[Path
                     "(client / année / projet / catégorie), modifiable dans les réglages.")
 
 
+def set_personal_depth(path: Path, depth: int) -> None:
+    """Mode personnel : profondeur maximum (catégorie comprise) choisie dans les réglages."""
+    convention = load_convention(path)
+    convention.structure.max_depth = depth
+    convention.structure.template = "{category}"
+    save_convention(convention, path)
+
+
 def add_category(path: Path, code: str, description: str = "Créée automatiquement par TriBin") -> bool:
     """Ajoute une catégorie à la convention (mode personnel) ; faux si elle existait déjà."""
     convention = load_convention(path)

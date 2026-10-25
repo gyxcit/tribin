@@ -27,6 +27,9 @@ class Structure(BaseModel):
     template: str = "{client}/{year}/{project}/{category}"
     project_format: str = "{project_code}_{project_name}"
     categories: list[Category] = Field(default_factory=list)
+    # Mode personnel : nombre maximum de niveaux sous la racine (catégorie comprise), choisis par l'IA :
+    # 3 -> « Etudes », « Etudes/Certifications » ou « Etudes/Certifications/Universite ». 0 : le gabarit décide.
+    max_depth: int = Field(default=0, ge=0, le=6)
 
     @field_validator("template")
     @classmethod
@@ -93,6 +96,15 @@ class Convention(BaseModel):
     versions: VersionsConfig = Field(default_factory=VersionsConfig)
 
     @model_validator(mode="after")
+    def _personal_depth(self) -> Convention:
+        """Conventions personnelles d'avant la profondeur réglable : catégorie puis sous-dossiers libres (3 niveaux)."""
+        if self.mode == "personal" and not self.structure.max_depth:
+            self.structure.max_depth = PERSONAL_DEPTH
+            if self.structure.template == "{category}/{year}":
+                self.structure.template = "{category}"
+        return self
+
+    @model_validator(mode="after")
     def _unique_codes(self) -> Convention:
         seen: set[str] = set()
         for client in self.clients:
@@ -121,6 +133,9 @@ class Convention(BaseModel):
         if not code:
             return None
         return next((c for c in self.clients if c.code.upper() == code.upper()), None)
+
+
+PERSONAL_DEPTH = 3
 
 
 def _category_key(name: str) -> str:

@@ -628,3 +628,22 @@ def test_auto_threshold_slider_and_switch(qapp, controller):
     assert wait(qapp, lambda: ready_items(controller, 1))
     assert wait(qapp, lambda: controller._notice_timer.isActive() or controller._notice["review"], 5)
     assert len(controller.service.pending()) == 1  # pas rangé tout seul
+
+
+def test_settings_filing_page_depth(qapp, controller):
+    from tribin.service.conventions import create_convention
+    from tribin.ui.settings import PAGES, SettingsDialog
+
+    assert [key for key, *_ in PAGES][:2] == ["folders", "filing"]  # convention et rangement : leur propre page
+    svc = controller.service
+    path, _ = create_convention("personal", svc.config.roots, svc.settings.data_dir)
+    cfg = svc.config
+    cfg.convention_path = str(path)
+    svc.update_config(cfg)
+    dialog = SettingsDialog(controller)
+    controller.extra.append(dialog)
+    assert dialog.depth() == 3 and "Universite" in dialog.depth_example.text()
+    dialog.depth_buttons.button(2).click()
+    assert dialog.depth_example.text().endswith("Certifications")
+    dialog._save()
+    assert svc.convention().structure.max_depth == 2

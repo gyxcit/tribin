@@ -38,8 +38,9 @@ possibilités. Les actions sont en bas : « Ranger ici » (Entrée), « Passer �
 
 **Deux modes**, au choix (et modifiable dans Réglages › Dossiers) :
 
-- **Personnel** : papiers, factures, bulletins de paie, photos… rangés par **catégorie puis par année**
-  (`Sante/2026`, `Banque/2026`). Les dossiers déjà présents (ex. `salaire`) deviennent des catégories. Si aucune
+- **Personnel** : papiers, factures, bulletins de paie, photos… rangés par **catégorie**, puis dans des
+  sous-dossiers choisis par l'IA jusqu'à la **profondeur maximum** réglée (3 par défaut :
+  `Etudes/Certifications/Universite`). Les dossiers déjà présents (ex. `salaire`) deviennent des catégories ; les sous-dossiers existants sont réutilisés. Si aucune
   catégorie ne convient, TriBin **en crée une** (ex. `Voyages`) et l'ajoute à la liste, y compris en rangement
   automatique ; tout reste annulable depuis l'Historique.
 - **Travail** : les fichiers d'une équipe, par client / année / projet / catégorie selon la convention partagée ;
@@ -133,8 +134,8 @@ ils partent dans TriBin, même si l'application est en arrière-plan (désactiva
 droit propose aussi « Trier avec TriBin » (Réglages › Système ; Maj + clic droit sous Windows 11).
 
 Depuis le widget, « Ranger les N prêts » range les fichiers prêts sans ouvrir la fenêtre. Dans Réglages › Dossiers,
-le **rangement automatique** (désactivé par défaut) range tout seul les fichiers dont l'IA est sûre (confiance d'au
-moins 80 %) ; les autres font l'objet d'une notification qui ouvre TriBin. Un fichier qui demanderait la création d'un
+le **rangement automatique** (désactivé par défaut, Réglages › Rangement) range tout seul les fichiers dont la
+confiance atteint le seuil choisi au curseur (80 % par défaut, de 60 à 95 %) ; les autres font l'objet d'une notification qui ouvre TriBin. Un fichier qui demanderait la création d'un
 dossier attend toujours votre accord, et tout s'annule depuis l'Historique.
 
 Dans la fenêtre principale : `Entrée` ranger, `E` modifier le nom, `A` autre possibilité, `Échap` mettre de côté (onglet « Mis de côté », rien n'est déplacé), `R` renvoyer à l'origine, `F5` actualiser (relit la clé et les réglages, relance les analyses restées sans IA).

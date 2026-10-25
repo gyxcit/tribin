@@ -75,6 +75,14 @@ def fields_from_folder(rel_folder: str, convention: Convention) -> dict[str, str
     return found
 
 
+def personal_folder_ok(rel_folder: str, convention: Convention) -> bool:
+    """Mode personnel : catégorie connue en tête et au plus `max_depth` niveaux."""
+    parts = [p for p in rel_folder.replace("\\", "/").split("/") if p]
+    depth = convention.structure.max_depth
+    return (convention.personal and bool(depth) and 1 <= len(parts) <= depth
+            and convention.find_category(parts[0]) is not None)
+
+
 def matches_template(rel_folder: str, convention: Convention) -> bool:
     """Vrai si le chemin relatif a la profondeur du gabarit et que la catégorie (dernier niveau) est connue."""
     parts = [p for p in rel_folder.replace("\\", "/").split("/") if p]

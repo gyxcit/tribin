@@ -1,12 +1,14 @@
 version: 1
 name: "Rangement personnel"
 language: fr
-# Mode personnel : ni client ni projet ; rangement par catégorie puis par année.
+# Mode personnel : ni client ni projet ; rangement par catégorie, puis sous-dossiers choisis par l'IA
+# (au plus max_depth niveaux : « Etudes/Certifications/Universite »).
 # Si aucune catégorie ne convient, TriBin en crée une (dossier + ligne ajoutée ci-dessous).
 mode: personal
 
 structure:
-  template: "{category}/{year}"
+  template: "{category}"
+  max_depth: 3
   categories:
     - { code: "Administratif", description: "Papiers d'identité, attestations, courriers officiels, état civil" }
     - { code: "Banque",        description: "Relevés de compte, prêts, épargne, placements" }

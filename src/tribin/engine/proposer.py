@@ -13,7 +13,7 @@ from pathlib import Path, PurePosixPath
 from tribin.config import STAGING_DIRNAME, is_within
 from tribin.convention.loader import Convention
 from tribin.convention.naming import build_name, clean_segment, extract_version, fit_to_path, split_extension, unique_name
-from tribin.convention.structure import fields_from_folder, folder_from_fields, matches_template
+from tribin.convention.structure import personal_folder_ok, fields_from_folder, folder_from_fields, matches_template
 from tribin.engine.candidates import Candidate, phase1_candidates
 from tribin.engine.prompts import PromptData, build_user_prompt, human_size, prompt_version, system_prompt
 from tribin.engine.similar import SimilarFolder
@@ -171,6 +171,45 @@ def _make_fields(resp: LLMProposal, folder: str, info: FileInfo, conv: Conventio
 MAX_CATEGORY_LENGTH = 30
 
 
+def _existing_child(parent: Path, name: str, naming) -> str:
+    """Nom d'un sous-dossier : l'existant s'il correspond (casse, accents), sinon un nom propre à créer."""
+    wanted = clean_segment(name, naming).replace(naming.separator, naming.word_separator).casefold()
+    try:
+        for entry in os.scandir(parent):
+            if entry.is_dir() and (entry.name.casefold() == name.casefold() or
+                                   clean_segment(entry.name, naming).replace(naming.separator,
+                                                                             naming.word_separator).casefold() == wanted):
+                return entry.name
+    except OSError:
+        pass
+    cleaned = clean_segment(name, naming).replace(naming.separator, naming.word_separator)
+    return cleaned[:1].upper() + cleaned[1:] if cleaned else ""
+
+
+def personal_folder(folder: str, category: str | None, new_category: str | None, conv: Convention, root: Path) -> str:
+    """Chemin du mode personnel : la catégorie (existante ou nouvelle) puis au plus `max_depth - 1` sous-dossiers.
+
+    Les dossiers existants gardent leur nom exact ; un chemin qui ne commence pas par la catégorie n'en garde que
+    celle-ci."""
+    parts = [p for p in folder.split("/") if p] if folder else []
+    head = new_category or (conv.find_category(parts[0]) if parts else None) or category
+    if not head:
+        return ""
+    head = conv.find_category(head) or head
+    same_head = bool(parts) and (conv.find_category(parts[0]) == head or
+                                 (new_category is not None and parts[0].casefold() == new_category.casefold()))
+    result, parent = [head], root / head
+    for part in (parts[1:] if same_head else [])[: conv.structure.max_depth - 1]:
+        if is_placeholder(part) or part.startswith((".", "_")):
+            break
+        name = _existing_child(parent, part, conv.naming)
+        if not name or len(name) > MAX_CATEGORY_LENGTH * 2:
+            break
+        result.append(name)
+        parent = parent / name
+    return "/".join(result)
+
+
 def new_category_for(resp: LLMProposal, conv: Convention) -> str | None:
     """Mode personnel : catégorie proposée par l'IA et absente de la liste -> nom de la catégorie à créer."""
     name = _real(resp.category)
@@ -194,7 +233,10 @@ def finalize(info: FileInfo, resp: LLMProposal, ctx: ProposeContext) -> Proposal
         folder = ""  # « null/CV/04_Livrables » (client inconnu écrit en toutes lettres) ou dossier interne _TriBin
     fields = _make_fields(resp, folder, info, conv, warnings)
     new_category = new_category_for(resp, conv)
-    if new_category:  # mode personnel : catégorie à créer ; le chemin suit le gabarit (catégorie / année)
+    if conv.personal and conv.structure.max_depth:  # catégorie puis sous-dossiers choisis par l'IA (N niveaux)
+        folder = personal_folder(folder, fields.category, new_category, conv, root)
+        fields.category = folder.split("/")[0] if folder else fields.category
+    elif new_category:  # mode personnel à gabarit fixe : catégorie à créer, chemin selon le gabarit
         fields.category = new_category
         folder = folder_from_fields(fields, conv, fallback_date=info.modified.date())
     if not folder:
@@ -213,7 +255,7 @@ def finalize(info: FileInfo, resp: LLMProposal, ctx: ProposeContext) -> Proposal
         warnings.append(f"Nouvelle catégorie « {new_category} » : le dossier {folder} sera créé.")
     elif folder_is_new:
         warnings.append(f"Création de dossier : {folder}")
-        if not matches_template(folder, conv):
+        if not matches_template(folder, conv) and not personal_folder_ok(folder, conv):
             warnings.append("Le dossier proposé ne suit pas le gabarit de la convention.")
             confidence = min(confidence, 0.5)
     name, path_warnings = fit_to_path(fields, conv.naming, info.extension, abs_folder, fallback_date=info.modified)
@@ -269,7 +311,8 @@ def propose(info: FileInfo, ctx: ProposeContext) -> Proposal:
                                  for s in similar if s.folder.casefold() not in known)]
     data = build_prompt_data(info, ctx, hint, candidates, examples, similar)
     try:
-        resp = ctx.llm.complete_json(system_prompt(ctx.convention.personal), build_user_prompt(data), LLMProposal,
+        resp = ctx.llm.complete_json(system_prompt(ctx.convention.personal, ctx.convention.structure.max_depth or 1),
+                                     build_user_prompt(data), LLMProposal,
                                      images=info.images[:1] or None)
         proposal = finalize(info, resp, ctx)
     except LLMError as exc:

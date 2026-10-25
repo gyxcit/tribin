@@ -5,10 +5,11 @@ from __future__ import annotations
 
 import sys
 from dataclasses import replace
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QSize, Qt, QUrl
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtGui import QDesktopServices, QFontMetrics
 from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
@@ -35,7 +36,8 @@ from tribin.config import save_api_key
 from tribin.learning.corrections import team_rule_alerts
 from tribin.learning.rules_store import delete_rule, list_rules, update_rule
 from tribin.service.bin import AUTO_MIN_CONFIDENCE
-from tribin.service.conventions import create_convention, current_mode
+from tribin.convention.loader import PERSONAL_DEPTH
+from tribin.service.conventions import create_convention, current_mode, set_personal_depth
 from tribin.service.profile import PRIVACY_NOTICE, save_profile
 from tribin.ui import system_integration
 from tribin.ui.components import (
@@ -50,15 +52,18 @@ from tribin.ui.components import (
 from tribin.ui.folder_picker import excluded_picker, roots_picker
 from tribin.ui.hotkey import HOTKEY_LABEL
 from tribin.ui.icons import line_icon
+from tribin.ui.theme import mono_font
 from tribin.ui.onboarding import MODE_CHOICES, PROVIDERS
 
 if TYPE_CHECKING:
     from tribin.ui.app import AppController
 
+DEPTH_EXAMPLE = ["Etudes", "Certifications", "Universite", "Licence", "2026"]
 MODELS = {"anthropic": ["claude-haiku-5-5", "claude-sonnet-5-5"],
           "gemini": ["gemini-flash-latest", "gemini-flash-lite-latest", "gemini-pro-latest"],
           "mistral": ["mistral-medium-latest", "mistral-small-latest", "mistral-large-latest"]}
-PAGES = (("folders", "Dossiers", "folder"), ("ai", "Intelligence artificielle", "sparkle"),
+PAGES = (("folders", "Dossiers", "folder"), ("filing", "Rangement", "files"),
+         ("ai", "Intelligence artificielle", "sparkle"),
          ("learning", "Apprentissage", "brain"), ("system", "Système", "monitor"))
 
 
@@ -127,7 +132,7 @@ class SettingsDialog(QDialog):
         self.resize(960, 660)
 
         self.pages = QStackedWidget()
-        for build in (self._folders_page, self._ai_page, self._learning_page, self._system_page):
+        for build in (self._folders_page, self._filing_page, self._ai_page, self._learning_page, self._system_page):
             page = build()
             page.finish()
             self.pages.addWidget(page)
@@ -184,7 +189,7 @@ class SettingsDialog(QDialog):
 
     def _folders_page(self) -> SettingsPage:
         cfg = self.c.service.config
-        page = SettingsPage("Dossiers", "Où TriBin range les fichiers, et selon quelle convention.")
+        page = SettingsPage("Dossiers", "Le mode d'utilisation et les dossiers que TriBin peut ranger.")
         self.initial_mode = current_mode(self.c.service)
         self.mode_group = QButtonGroup(self)
         self.mode_cards: dict[str, ChoiceCard] = {}
@@ -202,6 +207,12 @@ class SettingsDialog(QDialog):
         page.add_row("Dossiers à ranger", "TriBin ne range que dans ces dossiers.", self.roots)
         self.excluded = excluded_picker(cfg.local_excluded, self.roots.values)
         page.add_row("Dossiers à ne jamais toucher", "Rien n'y est déplacé ni renommé.", self.excluded)
+        return page
+
+    def _filing_page(self) -> SettingsPage:
+        """Comment ranger : convention, profondeur des dossiers (mode personnel) et rangement automatique."""
+        cfg = self.c.service.config
+        page = SettingsPage("Rangement", "La façon de ranger, la profondeur des dossiers et le rangement automatique.")
         conv_row = QHBoxLayout()
         self.convention = QLineEdit(cfg.convention_path)
         browse = QPushButton("Parcourir…")
@@ -211,11 +222,62 @@ class SettingsDialog(QDialog):
         remap = QPushButton("Réanalyser les dossiers")
         remap.setToolTip("Relit la structure des dossiers à ranger (après une réorganisation, par exemple).")
         remap.clicked.connect(self.c.remap)
-        page.add_row("Convention de rangement", "Fichier partagé par l'équipe, sur cet ordinateur ou le NAS.",
+        page.add_row("Convention de rangement", "Vos catégories et la façon de nommer les fichiers."
+                     if self.initial_mode == "personal" else "Fichier partagé par l'équipe, sur cet ordinateur ou le NAS.",
                      column(conv_row, remap))
+        self.depth_buttons = QButtonGroup(self)
+        self.initial_depth = self._current_depth()
+        if self.initial_mode == "personal":
+            page.add_row("Profondeur des dossiers", "Combien de niveaux l'IA peut utiliser dans une catégorie : "
+                         "elle range à la racine de la catégorie ou dans un sous-dossier, selon le fichier.",
+                         self._depth_box())
         page.add_row("Rangement automatique", "TriBin range tout seul les fichiers dont l'IA est assez sûre. "
                      "Les autres attendent votre avis : TriBin vous prévient.", self._auto_box(cfg))
         return page
+
+    def _current_depth(self) -> int:
+        try:
+            return self.c.service.convention().structure.max_depth or PERSONAL_DEPTH
+        except Exception:
+            return PERSONAL_DEPTH
+
+    def _depth_box(self) -> QWidget:
+        box = QWidget()
+        layout = QVBoxLayout(box)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
+        row = QHBoxLayout()
+        row.setSpacing(6)
+        for depth in range(1, 6):
+            button = QPushButton(f"{depth} niveau{'x' if depth > 1 else ''}")
+            button.setObjectName("Chip")
+            button.setCheckable(True)
+            button.setChecked(depth == self.initial_depth)
+            bold = button.font()
+            bold.setBold(True)
+            button.setMinimumWidth(QFontMetrics(bold).horizontalAdvance(button.text()) + 30)  # sélectionné : en gras
+            self.depth_buttons.addButton(button, depth)
+            row.addWidget(button)
+        row.addStretch()
+        layout.addLayout(row)
+        self.depth_example = QLabel()
+        self.depth_example.setFont(mono_font())
+        self.depth_hint = muted()
+        layout.addWidget(self.depth_example)
+        layout.addWidget(self.depth_hint)
+        self.depth_buttons.idClicked.connect(lambda _: self._depth_changed())
+        self._depth_changed()
+        return box
+
+    def depth(self) -> int:
+        return self.depth_buttons.checkedId() if self.depth_buttons.checkedId() > 0 else self.initial_depth
+
+    def _depth_changed(self) -> None:
+        depth = self.depth()
+        self.depth_example.setText("Exemple : " + " › ".join(DEPTH_EXAMPLE[:depth]))
+        self.depth_hint.setText({1: "Tous les fichiers d'une catégorie au même niveau.",
+                                 2: "Un niveau de sous-dossiers : type de document."}.get(
+            depth, "Recommandé : l'IA ne crée un sous-dossier que s'il regroupera des fichiers semblables."))
 
     def _auto_box(self, cfg) -> QWidget:
         """Interrupteur, curseur du seuil de confiance et phrase qui explique ce que fait ce seuil."""
@@ -246,8 +308,8 @@ class SettingsDialog(QDialog):
         self.threshold_hint = muted()
         layout.addWidget(self.threshold_hint)
         personal = self.initial_mode == "personal"
-        layout.addWidget(muted(("En mode personnel, une catégorie ou un dossier d'année manquant est créé sans "
-                                "demander. " if personal else "Un fichier qui demanderait un nouveau dossier attend "
+        layout.addWidget(muted(("En mode personnel, une catégorie ou un sous-dossier manquant (dans la limite de la "
+                                "profondeur) est créé sans demander. " if personal else "Un fichier qui demanderait un nouveau dossier attend "
                                 "toujours votre accord. ") + "Tout rangement s'annule depuis l'Historique."))
         self.auto_file.toggled.connect(lambda _: self._auto_changed())
         self.threshold.changed.connect(lambda _: self._auto_changed())
@@ -438,6 +500,8 @@ class SettingsDialog(QDialog):
             path, note = create_convention(mode, cfg.roots, svc.settings.data_dir)
             cfg.convention_path = str(path)
             QMessageBox.information(self, "TriBin", note)
+        if self.initial_mode == "personal" and mode == "personal" and self.depth() != self.initial_depth:
+            set_personal_depth(Path(cfg.convention_path), self.depth())
         cfg.auto_file = self.auto_file.isChecked()
         cfg.auto_min_confidence = self.threshold.value() / 100
         cfg.hotkey = self.hotkey.isChecked()

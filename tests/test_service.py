@@ -231,12 +231,12 @@ def test_personal_mode_creates_missing_category(settings, sb):
     svc, path = personal_service(settings, sb, llm)
     item = svc.analyze(svc.drop(sb / "inbox" / "scan0042.pdf").file_id)
     p = item.proposal
-    assert p.new_category == "Animaux" and p.target_folder == "Animaux/2026" and p.folder_is_new
+    assert p.new_category == "Animaux" and p.target_folder == "Animaux" and p.folder_is_new
     assert p.new_name == "2026-10-12_Vaccin-chat.pdf" and p.confidence == 0.9
     assert any("Nouvelle catégorie « Animaux »" in w for w in p.warnings)
     report = svc.auto_file()  # création du dossier de la nouvelle catégorie : sans demander (mode personnel)
     assert [i.file_id for i in report.done] == [item.file_id]
-    assert (sb / "root" / "Animaux" / "2026" / "2026-10-12_Vaccin-chat.pdf").exists()
+    assert (sb / "root" / "Animaux" / "2026-10-12_Vaccin-chat.pdf").exists()
     assert "Animaux" in load_convention(path).category_codes()  # ajoutée à la liste
     assert "Mode : personnel" in llm.prompts[0] and "Clients" not in llm.prompts[0]
 
@@ -270,3 +270,34 @@ def test_activity_statistics():
                            item("accepted", when=datetime(2026, 9, 1))], today=date(2026, 10, 25))
     assert (stats.filed, stats.this_month, stats.accepted, stats.auto, stats.corrected, stats.undone) == (5, 4, 2, 1, 2, 1)
     assert stats.without_correction == 3 / 5
+
+
+def test_personal_mode_subfolders_up_to_max_depth(settings, sb):
+    from tribin.convention.loader import load_convention
+
+    root = sb / "root"
+    (root / "Etudes" / "Certifications").mkdir(parents=True)
+    # l'IA propose 4 niveaux, avec une casse différente pour le dossier existant : 3 niveaux, nom existant gardé
+    llm = fixed(category="Etudes", target_folder="etudes/certifications/Université/Licence", date="2026-06-30",
+                description="Diplome licence", confidence=0.9)
+    svc, path = personal_service(settings, sb, llm)
+    assert load_convention(path).structure.max_depth == 3
+    item = svc.analyze(svc.drop(sb / "inbox" / "scan0042.pdf").file_id)
+    assert item.proposal.target_folder == "Etudes/Certifications/Universite"
+    assert item.proposal.confidence == 0.9 and not any("gabarit" in w for w in item.proposal.warnings)
+    assert [i.file_id for i in svc.auto_file().done] == [item.file_id]  # sous-dossier créé sans demander
+    assert (root / "Etudes" / "Certifications" / "Universite" / "2026-06-30_Diplome-licence.pdf").exists()
+
+    llm2 = fixed(category="Etudes", target_folder="Etudes", description="CV", confidence=0.9)
+    svc2, _ = personal_service(settings, sb, llm2)
+    other = svc2.analyze(svc2.drop(sb / "inbox" / "BC_4512.pdf").file_id)
+    assert other.proposal.target_folder == "Etudes"  # directement dans la catégorie
+
+
+def test_old_personal_conventions_switch_to_depth():
+    from tribin.convention.loader import Convention
+
+    old = Convention.model_validate({"mode": "personal", "structure": {"template": "{category}/{year}"}})
+    assert old.structure.max_depth == 3 and old.structure.template == "{category}"
+    work = Convention.model_validate({"structure": {"template": "{client}/{year}/{project}/{category}"}})
+    assert work.structure.max_depth == 0  # mode travail : inchangé
